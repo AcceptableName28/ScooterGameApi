@@ -1,0 +1,61 @@
+// GET  /api/leaderboard       -> returns top 10 scores
+// POST /api/leaderboard body: {name:"ABC", score:1234} -> inserts score
+export default async function handler(req, res) {
+  // CORS (allow your GitHub Pages domain — or "*" during testing)
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+  if (req.method === 'OPTIONS') return res.status(200).end();
+
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE; // server-only secret
+  if (!url || !key) return res.status(500).json({ error: 'Missing env vars' });
+
+  const isValidName = (s) => /^[A-Z0-9]{1,3}$/.test((s||'').toUpperCase());
+  const clampScore  = (n) => Math.max(0, Math.min(1_000_000, Number(n)|0));
+
+  if (req.method === 'GET') {
+    const r = await fetch(`${url}/rest/v1/scores?select=name,score,created_at&order=score.desc,created_at.asc&limit=10`, {
+      headers: { apikey: key, Authorization: `Bearer ${key}` }
+    });
+    const data = await r.json();
+    return res.status(200).json(data);
+  }
+
+  if (req.method === 'POST') {
+    const { name, score } = req.body || {};
+    const cleanName = (name||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,3);
+    if (!isValidName(cleanName)) return res.status(400).json({ error: 'Invalid initials' });
+    const cleanScore = clampScore(score);
+
+    // (basic) soft rate-limit: refuse ultra-rapid posts
+    // For real protection, add Redis/Upstash or Supabase RLS later.
+    if (!req._lastPostAt) req._lastPostAt = {};
+    const ip = (req.headers['x-forwarded-for']||'').toString().split(',')[0].trim();
+    const now = Date.now();
+    if (req._lastPostAt[ip] && now - req._lastPostAt[ip] < 1000) {
+      return res.status(429).json({ error: 'Too many requests' });
+    }
+    req._lastPostAt[ip] = now;
+
+    const r = await fetch(`${url}/rest/v1/scores`, {
+      method: 'POST',
+      headers: {
+        apikey: key,
+        Authorization: `Bearer ${key}`,
+        'Content-Type': 'application/json',
+        Prefer: 'return=representation'
+      },
+      body: JSON.stringify({ name: cleanName, score: cleanScore })
+    });
+    if (!r.ok) {
+      const text = await r.text();
+      return res.status(500).json({ error: 'Insert failed', detail: text });
+    }
+    const [row] = await r.json();
+    return res.status(200).json(row);
+  }
+
+  res.setHeader('Allow', 'GET, POST, OPTIONS');
+  return res.status(405).end('Method Not Allowed');
+}
