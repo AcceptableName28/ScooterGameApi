@@ -1,0 +1,6 @@
+{
+  "name": "vespa-leaderboard-api",
+  "type": "module",
+  "private": true,
+  "dependencies": {}
+}
