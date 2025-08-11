@@ -1,6 +1,5 @@
 {
-  "name": "vespa-leaderboard-api",
+  "name": "scooter-game-api",
   "type": "module",
-  "private": true,
-  "dependencies": {}
+  "private": true
 }
