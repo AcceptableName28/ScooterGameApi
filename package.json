@@ -1,6 +1,6 @@
 {
   "name": "scooter-game-api",
   "type": "module",
-  "private": true
+  "private": true,
   "packageManager": "pnpm@7.5.1"
 }
