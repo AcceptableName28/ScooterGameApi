@@ -1,14 +1,14 @@
 // GET  /api/leaderboard       -> top 10 scores
 // POST /api/leaderboard {name:"ABC", score:1234} -> add score
 export default async function handler(req, res) {
-  // CORS (relax for testing; later set to your GH Pages origin)
+  // CORS (relax for testing)
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   const url = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE; // server-only secret
+  const key = process.env.SUPABASE_SERVICE_ROLE;
   if (!url || !key) return res.status(500).json({ error: 'Missing env vars' });
 
   const isValidName = s => /^[A-Z0-9]{1,3}$/.test((s||'').toUpperCase());
@@ -30,16 +30,16 @@ export default async function handler(req, res) {
     const cleanScore = clampScore(score);
 
     const r = await fetch(`${url}/rest/v1/scores`, {
-      method: 'POST',
-      headers: {
+      method:'POST',
+      headers:{
         apikey: key,
         Authorization: `Bearer ${key}`,
-        'Content-Type': 'application/json',
-        Prefer: 'return=representation'
+        'Content-Type':'application/json',
+        Prefer:'return=representation'
       },
       body: JSON.stringify({ name: cleanName, score: cleanScore })
     });
-    if (!r.ok) return res.status(500).json({ error: 'Insert failed', detail: await r.text() });
+    if (!r.ok) return res.status(500).json({ error:'Insert failed', detail: await r.text() });
     const [row] = await r.json();
     return res.status(200).json(row);
   }
