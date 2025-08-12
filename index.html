@@ -141,6 +141,31 @@ function keyHandler(e,down){ if(e.keyCode===KEY.SPACE||e.keyCode===KEY.UP){ if(d
 addEventListener('keydown', e=>keyHandler(e,true)); addEventListener('keyup', e=>keyHandler(e,false));
 startBtn.addEventListener('click', e=>{e.preventDefault(); startGame();});
 
+function handleTap() {
+  // Start the game from start/game-over screens
+  if (!world.alive && !awaitingInitials) { startGame(); return; }
+  // Queue a jump (or double-jump if mid-air)
+  if (world.alive) { player.jumpBuffer = BUFFER_FRAMES; }
+}
+
+// Use Pointer Events when available (covers touch + pen)
+function onPointerDown(e) {
+  // Ignore mouse clicks; we only want finger/pen taps here
+  if (e.pointerType && e.pointerType === 'mouse') return;
+  e.preventDefault();            // stop scroll/zoom on iOS
+  handleTap();
+}
+
+window.addEventListener('pointerdown', onPointerDown, { passive: false });
+
+// Fallback for older browsers (just in case)
+window.addEventListener('touchstart', function(e){
+  if (e.touches && e.touches.length === 1) {
+    e.preventDefault();
+    handleTap();
+  }
+}, { passive: false });
+
 /* ===== Save/Skip/Restart ===== */
 function sanitizeInitials(s){return (s||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,3);}
 initialsEl.addEventListener('input', ()=>{const clean=sanitizeInitials(initialsEl.value); if(initialsEl.value!==clean) initialsEl.value=clean;});
