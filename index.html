@@ -2,12 +2,14 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <title>Blue Vespa Scooter Game</title>
 <style>
   :root { --app-vh: 100vh; }
+
+  html, body { padding: 0; margin: 0; }
   body {
-    margin: 0;
     background: #1d1f22;
     font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
     color: #fff;
@@ -15,6 +17,10 @@
     display: flex;
     flex-direction: column;
     align-items: center;
+
+    /* keep content above iOS bottom bar */
+    padding-bottom: constant(safe-area-inset-bottom);
+    padding-bottom: env(safe-area-inset-bottom);
   }
 
   /* Top 10 bar */
@@ -37,9 +43,10 @@
     background: #0e5580;       /* sky */
     display: block;
     width: 100%;
-    height: calc(var(--app-vh, 100vh) - 140px);  /* stable mobile height */
+    /* stable mobile height: viewport minus top bar (~140px) minus safe-area bottom */
+    height: calc(var(--app-vh, 100vh) - 140px - env(safe-area-inset-bottom));
     min-height: 360px;
-    max-height: 100vh;
+    max-height: calc(100vh - env(safe-area-inset-bottom));
     border: 2px solid #000;
     border-radius: 10px;
     box-sizing: border-box;
@@ -97,7 +104,7 @@
   </div>
 
 <script>
-/* ---------------- Mobile real viewport height (iOS safe) ---------------- */
+/* ---------------- Mobile real viewport height (iOS/Firefox safe) ---------------- */
 function setAppVh(){
   const vv = window.visualViewport;
   const h = vv && vv.height ? vv.height : window.innerHeight || document.documentElement.clientHeight || 0;
@@ -122,6 +129,7 @@ function fitCanvasDPR(){
   canvas.width  = Math.max(1, Math.round(rect.width  * DPR));
   canvas.height = Math.max(1, Math.round(rect.height * DPR));
 
+  // 1 unit == 1 CSS pixel
   ctx.setTransform(DPR,0,0,DPR,0,0);
 
   W = Math.max(1, Math.round(rect.width));
@@ -142,7 +150,7 @@ if (window.visualViewport) window.visualViewport.addEventListener('resize', fitC
 
 /* ---------------- Assets ---------------- */
 const vespaImg = new Image();
-vespaImg.src = 'Blue Vespa Right.png';
+vespaImg.src = 'Blue Vespa Right.png';  // place this PNG next to index.html
 
 /* ---------------- Game state ---------------- */
 let running = false;
@@ -152,7 +160,7 @@ let obstacles = [];
 
 // Speed model
 const SPEED_BASE = 4;
-const SPEED_MAX  = 15; // you asked for 15
+const SPEED_MAX  = 15; // your max
 let speed = SPEED_BASE;
 
 // World knobs (favor singles, gradual ramp)
@@ -285,7 +293,7 @@ function frame(){
   // clear
   ctx.clearRect(0,0,canvas.width,canvas.height);
 
-  // speed ramp (simple, long-lived)
+  // speed ramp (long‑lived)
   speed = Math.min(SPEED_MAX, SPEED_BASE + world.rampRate * score);
 
   /* --- player physics --- */
@@ -325,7 +333,7 @@ function frame(){
     ctx.closePath();
     ctx.fill();
 
-    // simple bbox collision against triangle AABB (fair enough here)
+    // AABB vs triangle bbox (simple + fair)
     const bbox = { x:o.x, y:o.y - o.height, w:o.base, h:o.height };
     if (player.x < bbox.x + bbox.w &&
         player.x + player.w > bbox.x &&
@@ -363,8 +371,15 @@ function jump(){
     player.onGround = false;
   }
 }
-document.getElementById('startButton').addEventListener('click', (e)=>{ e.preventDefault(); startGame(); });
-document.getElementById('restartButton').addEventListener('click', (e)=>{ e.preventDefault(); startGame(); });
+const startBtn = document.getElementById('startButton');
+const restartBtn = document.getElementById('restartButton');
+
+startBtn.addEventListener('click', (e)=>{ e.preventDefault(); startGame(); });
+restartBtn.addEventListener('click', (e)=>{ e.preventDefault(); startGame(); });
+
+// Instant tap on iOS/Firefox iOS
+startBtn.addEventListener('touchstart', (e)=>{ e.preventDefault(); startGame(); }, {passive:false});
+restartBtn.addEventListener('touchstart', (e)=>{ e.preventDefault(); startGame(); }, {passive:false});
 
 document.addEventListener('keydown', (e)=>{
   if (e.code === 'Space'){
@@ -389,7 +404,7 @@ function loadLeaderboard(){
     .then(list=>{
       const lb = document.getElementById('lbList');
       lb.innerHTML = '';
-      list.forEach((row, i)=>{
+      list.forEach((row)=>{
         const li = document.createElement('li');
         li.innerHTML = `<b>${(row.name||'---').toUpperCase().slice(0,3)}</b>: ${row.score}`;
         lb.appendChild(li);
@@ -408,6 +423,7 @@ function saveScore(){
     body: JSON.stringify({ name: initials, score })
   }).then(()=>loadLeaderboard());
 }
+
 document.getElementById('saveScoreButton').addEventListener('click', saveScore);
 document.getElementById('skipButton').addEventListener('click', ()=>{ document.getElementById('gameOverScreen').style.display='none'; });
 
