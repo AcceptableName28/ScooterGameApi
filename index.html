@@ -5,68 +5,35 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <title>Blue Vespa Scooter Game</title>
 <style>
-  :root{
-    --app-vh: 100vh;   /* updated via JS to real visible height */
-    --header-h: 110px; /* space reserved when Top10 is visible */
-  }
-
+  :root{ --app-vh:100vh; --header-h:110px; }
   html,body{margin:0;padding:0}
   body{
-    background:#cfe9ff;
-    color:#111;
-    font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
-    overflow:hidden; display:flex; flex-direction:column; align-items:center;
-    padding-bottom:env(safe-area-inset-bottom);
-    -webkit-user-select:none; user-select:none;
+    background:#cfe9ff;color:#111;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+    overflow:hidden;display:flex;flex-direction:column;align-items:center;
+    padding-bottom:env(safe-area-inset-bottom);-webkit-user-select:none;user-select:none;
   }
-
-  /* ---------- Top 10 ---------- */
-  #leaderboard{
-    width:100%; max-width:720px;
-    padding:8px 12px 6px;
-    background:#212529; color:#fff;
-    border-bottom:2px solid rgba(255,255,255,.08);
-    box-sizing:border-box;
-  }
-  #leaderboard.hidden{ display:none; }
-  #leaderboard h3{ margin:6px 0 8px; text-align:center; letter-spacing:.5px }
-  #leaderboard ol{ margin:0 auto 6px; padding-left:24px; max-width:680px; line-height:1.35 }
-
-  /* ---------- Game area ---------- */
-  #wrap{ position:relative; width:100%; max-width:720px; }
+  #leaderboard{width:100%;max-width:720px;padding:8px 12px 6px;background:#212529;color:#fff;border-bottom:2px solid rgba(255,255,255,.08);box-sizing:border-box}
+  #leaderboard.hidden{display:none}
+  #leaderboard h3{margin:6px 0 8px;text-align:center;letter-spacing:.5px}
+  #leaderboard ol{margin:0 auto 6px;padding-left:24px;max-width:680px;line-height:1.35}
+  #wrap{position:relative;width:100%;max-width:720px}
   canvas{
-    display:block; width:100%;
-    background:linear-gradient(#bfe2ff, #8cc8ff 62%, #63b1ff 62%, #63b1ff 100%);
+    display:block;width:100%;
+    background:linear-gradient(#bfe2ff,#8cc8ff 62%,#63b1ff 62%,#63b1ff 100%);
     height:calc(var(--app-vh,100vh) - var(--header-h) - env(safe-area-inset-bottom));
-    min-height:420px; max-height:calc(100vh - env(safe-area-inset-bottom));
-    border:2px solid #000; border-radius:12px; box-sizing:border-box;
-    touch-action:manipulation;
+    min-height:420px;max-height:calc(100vh - env(safe-area-inset-bottom));
+    border:2px solid #000;border-radius:12px;box-sizing:border-box;touch-action:manipulation;
   }
-
-  /* ---------- Overlays ---------- */
-  .overlay{
-    position:absolute; inset:0; z-index:10;
-    display:flex; flex-direction:column; align-items:center; justify-content:center;
-    background:rgba(255,255,255,.88); color:#111; text-align:center; padding:18px;
-  }
-  .overlay h1{ margin:0 0 10px; font-size:40px }
-  .overlay p{ margin:0 0 10px; opacity:.8 }
-  .row{ display:flex; gap:10px; flex-wrap:wrap; justify-content:center; align-items:center }
-
-  button{
-    padding:10px 16px; font-size:18px; font-weight:800;
-    border:0; border-radius:12px; background:#111; color:#fff; cursor:pointer;
-    touch-action:manipulation;
-  }
-  button.secondary{ background:#666 }
-  input.initials{
-    width:78px; text-transform:uppercase; font-size:20px; text-align:center;
-    border:2px solid #111; background:#fff; color:#111; padding:8px 10px; border-radius:10px; outline:none;
-  }
+  .overlay{position:absolute;inset:0;z-index:10;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(255,255,255,.88);color:#111;text-align:center;padding:18px}
+  .overlay h1{margin:0 0 10px;font-size:40px}
+  .overlay p{margin:0 0 10px;opacity:.8}
+  .row{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;align-items:center}
+  button{padding:10px 16px;font-size:18px;font-weight:800;border:0;border-radius:12px;background:#111;color:#fff;cursor:pointer;touch-action:manipulation}
+  button.secondary{background:#666}
+  input.initials{width:78px;text-transform:uppercase;font-size:20px;text-align:center;border:2px solid #111;background:#fff;color:#111;padding:8px 10px;border-radius:10px;outline:none}
 </style>
 </head>
 <body>
-  <!-- Top 10 (shown on Start & Game Over; hidden while playing) -->
   <div id="leaderboard">
     <h3>Top 10</h3>
     <ol id="lbList"></ol>
@@ -75,18 +42,14 @@
   <div id="wrap">
     <canvas id="gameCanvas" width="960" height="540" aria-label="Blue Vespa Game"></canvas>
 
-    <!-- Start -->
     <div id="startScreen" class="overlay">
       <div>
         <h1>Blue Vespa</h1>
         <p>Tap or press <b>Space</b> to jump (double‑jump allowed)</p>
-        <div class="row">
-          <button id="startButton" onclick="window.__start&&window.__start()">Start</button>
-        </div>
+        <div class="row"><button id="startButton" onclick="window.__start&&window.__start()">Start</button></div>
       </div>
     </div>
 
-    <!-- Game Over -->
     <div id="gameOverScreen" class="overlay" style="display:none">
       <div>
         <h1>Game Over</h1>
@@ -96,15 +59,13 @@
           <button id="saveScoreButton">Save</button>
           <button id="skipButton" class="secondary">Skip</button>
         </div>
-        <div class="row">
-          <button id="restartButton">Restart</button>
-        </div>
+        <div class="row"><button id="restartButton">Restart</button></div>
       </div>
     </div>
   </div>
 
 <script>
-/* ====== viewport height fix (iOS/Firefox toolbars) ====== */
+/* viewport height fix */
 function setAppVh(){
   const vv=window.visualViewport;
   const h=vv&&vv.height ? vv.height : (window.innerHeight||document.documentElement.clientHeight||0);
@@ -115,77 +76,69 @@ addEventListener('resize', setAppVh, {passive:true});
 addEventListener('orientationchange', setAppVh, {passive:true});
 if(window.visualViewport) window.visualViewport.addEventListener('resize', setAppVh, {passive:true});
 
-/* ====== canvas & DPR ====== */
+/* canvas & DPR */
 const canvas=document.getElementById('gameCanvas');
 const ctx=canvas.getContext('2d');
 
-/* player BEFORE sizing so we can clamp safely */
-let player={ x: 90, y: 0, w: 120, h: 80, dy: 0, onGround: false, jumps: 0 };
+let player={ x:90, y:0, w:120, h:80, dy:0, onGround:false, jumps:0 };
 
-let W=960, H=540, floorY=Math.round(H*0.70);  /* raised road to push action up */
+let W=960, H=540, floorY=Math.round(H*0.70);
 function fitCanvasDPR(){
   const rect=canvas.getBoundingClientRect();
   const DPR=Math.max(1,window.devicePixelRatio||1);
-  canvas.width =Math.max(1,Math.round(rect.width *DPR));
+  canvas.width=Math.max(1,Math.round(rect.width*DPR));
   canvas.height=Math.max(1,Math.round(rect.height*DPR));
   ctx.setTransform(DPR,0,0,DPR,0,0);
   W=Math.max(1,Math.round(rect.width));
   H=Math.max(1,Math.round(rect.height));
   floorY=Math.round(H*0.70);
-  if(player && player.y>floorY-player.h){
-    player.y=floorY-player.h; player.dy=0; player.onGround=true; player.jumps=0;
-  }
+  if(player && player.y>floorY-player.h){ player.y=floorY-player.h; player.dy=0; player.onGround=true; player.jumps=0; }
 }
 fitCanvasDPR();
 addEventListener('resize',fitCanvasDPR);
 if(window.visualViewport) window.visualViewport.addEventListener('resize',fitCanvasDPR,{passive:true});
 
-/* ====== assets ====== */
+/* assets */
 const vespaImg=new Image();
-vespaImg.src='Blue Vespa Right.png';  // keep this exact name
-vespaImg.onerror=()=>console.warn('Vespa PNG not found. Check file name/path.');
+vespaImg.src='Blue Vespa Right.png';
+vespaImg.onerror=()=>console.warn('Vespa PNG not found.');
 
-/* ====== world & tuning (friendlier) ====== */
+/* world & tuning */
 let running=false, score=0;
 let obstacles=[];
 
-/* slower first game + gentle ramp */
-const SPEED_BASE = 2.8;
-const SPEED_MAX  = 15;
-let speed        = SPEED_BASE;
+const SPEED_BASE=2.8;
+const SPEED_MAX =15;
+let speed=SPEED_BASE;
 
 const world={
   pTallBase:0.14, pTallLate:0.34, tallStreak:0, singleStreak:0, maxTallStreak:1, maxSingleStreak:4,
-  warmupScore:150, rampRate:0.0014,
-  rtSingle:0.90, rtTall:1.05, rtJitter:0.10
+  warmupScore:150, rampRate:0.0014, rtSingle:0.90, rtTall:1.05, rtJitter:0.10
 };
 
-let distSinceSpawn=0, nextGapPx=560;  // first obstacle after ~3s at slow speed
+let distSinceSpawn=0, nextGapPx=560;
 
-/* jump physics: more air on double jump */
-const GRAVITY_ASC  = 0.44;   // up
-const GRAVITY_DESC = 0.60;   // down
-const JUMP_VEL_1   = 11.6;
-the JUMP_VEL_2   = 11.0;
+const GRAVITY_ASC=0.44, GRAVITY_DESC=0.60;
+const JUMP_VEL_1=11.6, JUMP_VEL_2=11.0;   /* <-- fixed line */
 
-/* ====== draw helpers ====== */
+/* draw */
 function drawRoad(){
   const roadTop=floorY+2;
-  ctx.fillStyle='#2a2a2a'; ctx.fillRect(0, roadTop, W, H-roadTop);
+  ctx.fillStyle='#2a2a2a'; ctx.fillRect(0,roadTop,W,H-roadTop);
   ctx.fillStyle='rgba(255,255,255,.85)';
-  const dashW=28, gap=22, y=roadTop+18;
-  for(let x=-((Date.now()/30)% (dashW+gap)); x<W; x+=dashW+gap) ctx.fillRect(x,y,dashW,4);
+  const dashW=28,gap=22,y=roadTop+18;
+  for(let x=-((Date.now()/30)%(dashW+gap)); x<W; x+=dashW+gap) ctx.fillRect(x,y,dashW,4);
 }
 function drawVespa(){
   if(vespaImg.complete && vespaImg.naturalWidth) ctx.drawImage(vespaImg, player.x, player.y, player.w, player.h);
   else { ctx.fillStyle='#1e8bff'; ctx.fillRect(player.x, player.y, player.w, player.h); }
 }
 
-/* ====== obstacle generation ====== */
+/* obstacles */
 function decideTall(s){
-  const t=Math.min(1, Math.max(0, (s - world.warmupScore)/1500));
-  let p=world.pTallBase*(1-t) + world.pTallLate*t;
-  if(s<800) p*=0.55;                       // mostly single jumps early
+  const t=Math.min(1, Math.max(0, (s-world.warmupScore)/1500));
+  let p=world.pTallBase*(1-t)+world.pTallLate*t;
+  if(s<800) p*=0.55;
   if(world.tallStreak>0) p*=0.5;
   if(world.tallStreak>=world.maxTallStreak) return false;
   if(world.singleStreak>=world.maxSingleStreak) return true;
@@ -194,88 +147,63 @@ function decideTall(s){
 function triangleSpec(tall){
   const ramp=Math.min(1, Math.max(0, score/1200));
   const smallMin=28, smallMax=42;
-  const tallMin = 42 + (50-42)*ramp, tallMax = 60 + (74-60)*ramp;
-  const h = tall ? (tallMin + Math.random()*(tallMax - tallMin))
-                 : (smallMin + Math.random()*(smallMax - smallMin));
-  const base = h*0.9 + Math.random()*8;
-  return { base, height:h };
+  const tallMin=42+(50-42)*ramp, tallMax=60+(74-60)*ramp;
+  const h=tall ? (tallMin+Math.random()*(tallMax-tallMin)) : (smallMin+Math.random()*(smallMax-smallMin));
+  const base=h*0.9+Math.random()*8;
+  return {base, height:h};
 }
-function planNextGapPx(v, tall){
-  const pxps = Math.max(1, v * 60);
-  const rtBase = tall ? world.rtTall : world.rtSingle;
-  const rt = Math.max(0.65, rtBase + ((Math.random()*2-1)*world.rtJitter));
-  const margin = 140 + v*8 + (tall ? 64 : 16);  // wider gaps as speed rises
+function planNextGapPx(v,tall){
+  const pxps=Math.max(1, v*60);
+  const rtBase=tall?world.rtTall:world.rtSingle;
+  const rt=Math.max(0.65, rtBase + ((Math.random()*2-1)*world.rtJitter));
+  const margin=140 + v*8 + (tall?64:16);
   return Math.max(280, Math.round(pxps*rt + margin));
 }
 function spawnObstacle(tall){
   const spec=triangleSpec(tall);
   obstacles.push({ x:W+24, y:floorY, base:spec.base, height:spec.height, color:tall?'#ef476f':'#06d6a0', tall });
   if(tall){ world.tallStreak++; world.singleStreak=0; } else { world.singleStreak++; world.tallStreak=0; }
-  nextGapPx = planNextGapPx(speed, decideTall(score));
+  nextGapPx=planNextGapPx(speed, decideTall(score));
   distSinceSpawn=0;
 }
 
-/* ====== hit‑box & triangle collision (forgiving) ====== */
+/* hitbox + collision */
 function getPlayerHitbox(){
-  const padX = player.w * 0.22;
-  const padY = player.h * 0.28;
-  return {
-    x: player.x + padX,
-    y: player.y + padY,
-    w: player.w - padX*2,
-    h: player.h - padY*2
-  };
+  const padX=player.w*0.22, padY=player.h*0.28;
+  return { x:player.x+padX, y:player.y+padY, w:player.w-padX*2, h:player.h-padY*2 };
 }
-function pointInTri(px, py, ax, ay, bx, by, cx, cy){
-  const v0x=cx-ax, v0y=cy-ay;
-  const v1x=bx-ax, v1y=by-ay;
-  const v2x=px-ax, v2y=py-ay;
-  const dot00=v0x*v0x+v0y*v0y;
-  const dot01=v0x*v1x+v0y*v1y;
-  const dot02=v0x*v2x+v0y*v2y;
-  const dot11=v1x*v1x+v1y*v1y;
-  const dot12=v1x*v2x+v1y*v2y;
-  const invDen=1/Math.max(1e-8, (dot00*dot11 - dot01*dot01));
-  const u=(dot11*dot02 - dot01*dot12)*invDen;
-  const v=(dot00*dot12 - dot01*dot02)*invDen;
+function pointInTri(px,py,ax,ay,bx,by,cx,cy){
+  const v0x=cx-ax,v0y=cy-ay, v1x=bx-ax,v1y=by-ay, v2x=px-ax,v2y=py-ay;
+  const dot00=v0x*v0x+v0y*v0y, dot01=v0x*v1x+v0y*v1y, dot02=v0x*v2x+v0y*v2y;
+  const dot11=v1x*v1x+v1y*v1y, dot12=v1x*v2x+v1y*v2y;
+  const inv=1/Math.max(1e-8,(dot00*dot11 - dot01*dot01));
+  const u=(dot11*dot02 - dot01*dot12)*inv, v=(dot00*dot12 - dot01*dot02)*inv;
   return (u>=0 && v>=0 && (u+v)<=1);
 }
 function hitsTriangle(hit, tri){
-  const ax = tri.x, bx = tri.x + tri.base, cx = tri.x + tri.base/2;
-  const ay = tri.y, by = tri.y,            cy = tri.y - tri.height;
-
-  // quick reject: expanded AABB so “close” doesn’t count
-  const pad = 6;
-  if (hit.x + hit.w <= ax + pad) return false;
-  if (hit.x >= bx - pad) return false;
-  if (hit.y + hit.h <= cy + pad) return false;
-  if (hit.y >= ay) return false;
-
-  // precise: check bottom corners of the hitbox
-  const blx = hit.x,           bly = hit.y + hit.h - 2;
-  const brx = hit.x + hit.w,   bry = hit.y + hit.h - 2;
-  return pointInTri(blx, bly, ax, ay, bx, by, cx, cy) ||
-         pointInTri(brx, bry, ax, ay, bx, by, cx, cy);
+  const ax=tri.x, bx=tri.x+tri.base, cx=tri.x+tri.base/2;
+  const ay=tri.y, by=tri.y,            cy=tri.y-tri.height;
+  const pad=6;
+  if(hit.x+hit.w<=ax+pad) return false;
+  if(hit.x>=bx-pad) return false;
+  if(hit.y+hit.h<=cy+pad) return false;
+  if(hit.y>=ay) return false;
+  const blx=hit.x,           bly=hit.y+hit.h-2;
+  const brx=hit.x+hit.w,     bry=hit.y+hit.h-2;
+  return pointInTri(blx,bly,ax,ay,bx,by,cx,cy) || pointInTri(brx,bry,ax,ay,bx,by,cx,cy);
 }
 
-/* ====== game control ====== */
+/* game control */
 function resetGame(){
-  score = 0;
-  speed = SPEED_BASE;
-  obstacles.length = 0;
-  world.tallStreak = 0; world.singleStreak = 0;
-
-  nextGapPx = 560;           // nice long first gap
-  distSinceSpawn = 0;
-
-  player.y = floorY - player.h; player.dy = 0; player.onGround = true; player.jumps = 0;
+  score=0; speed=SPEED_BASE; obstacles.length=0;
+  world.tallStreak=0; world.singleStreak=0;
+  nextGapPx=560; distSinceSpawn=0;
+  player.y=floorY-player.h; player.dy=0; player.onGround=true; player.jumps=0;
 }
 function startGame(){
   document.getElementById('leaderboard').classList.add('hidden');
   document.documentElement.style.setProperty('--header-h','0px');
-
   fitCanvasDPR(); setTimeout(fitCanvasDPR,60); setTimeout(fitCanvasDPR,260);
-
   document.getElementById('startScreen').style.display='none';
   document.getElementById('gameOverScreen').style.display='none';
   resetGame(); running=true; window.__startCalled=true;
@@ -285,94 +213,67 @@ function endGame(){
   running=false;
   document.getElementById('finalScore').textContent=`Score: ${score}`;
   document.getElementById('gameOverScreen').style.display='flex';
-
   document.getElementById('leaderboard').classList.remove('hidden');
   document.documentElement.style.setProperty('--header-h','110px');
   setAppVh(); fitCanvasDPR();
 }
 
-/* ====== main loop ====== */
+/* loop */
 function frame(){
   if(!running) return;
   ctx.clearRect(0,0,canvas.width,canvas.height);
-
   drawRoad();
 
-  // gentle ramp
-  speed = Math.min(SPEED_MAX, SPEED_BASE + world.rampRate * score);
+  speed=Math.min(SPEED_MAX, SPEED_BASE + world.rampRate*score);
 
-  // physics with lighter ascent / heavier descent
   player.y += player.dy;
-  player.dy += (player.dy < 0 ? GRAVITY_ASC : GRAVITY_DESC);
-
-  if(player.y >= floorY - player.h){
-    player.y = floorY - player.h; player.dy = 0;
-    if(!player.onGround){ player.onGround = true; player.jumps = 0; }
-  } else player.onGround = false;
+  player.dy += (player.dy<0 ? GRAVITY_ASC : GRAVITY_DESC);
+  if(player.y >= floorY-player.h){
+    player.y=floorY-player.h; player.dy=0;
+    if(!player.onGround){ player.onGround=true; player.jumps=0; }
+  } else player.onGround=false;
 
   drawVespa();
 
-  // obstacles + collision
-  const hit = getPlayerHitbox();
+  const hit=getPlayerHitbox();
   for(let i=obstacles.length-1;i>=0;i--){
-    const o=obstacles[i];
-    o.x -= speed;
-
-    // draw triangle
+    const o=obstacles[i]; o.x -= speed;
     ctx.fillStyle=o.color; ctx.beginPath();
-    ctx.moveTo(o.x,o.y);
-    ctx.lineTo(o.x + o.base/2, o.y - o.height);
-    ctx.lineTo(o.x + o.base,   o.y);
-    ctx.closePath(); ctx.fill();
-
-    if(hitsTriangle(hit, o)){ endGame(); break; }
-
-    if(o.x + o.base < 0){ obstacles.splice(i,1); score++; }
+    ctx.moveTo(o.x,o.y); ctx.lineTo(o.x+o.base/2,o.y-o.height); ctx.lineTo(o.x+o.base,o.y); ctx.closePath(); ctx.fill();
+    if(hitsTriangle(hit,o)){ endGame(); break; }
+    if(o.x+o.base<0){ obstacles.splice(i,1); score++; }
   }
 
-  // spawn by traveled distance
   distSinceSpawn += speed;
-  if(distSinceSpawn >= nextGapPx) spawnObstacle(decideTall(score));
+  if(distSinceSpawn>=nextGapPx) spawnObstacle(decideTall(score));
 
-  // HUD
-  ctx.fillStyle='#08304d';
-  ctx.font='18px system-ui, sans-serif';
-  ctx.fillText(`Score: ${score}`, 12, 28);
-
+  ctx.fillStyle='#08304d'; ctx.font='18px system-ui,sans-serif'; ctx.fillText(`Score: ${score}`,12,28);
   requestAnimationFrame(frame);
 }
 
-/* ====== input ====== */
+/* input */
 function jump(){
-  if (player.jumps === 0){
-    player.dy = -JUMP_VEL_1;
-    player.jumps = 1;
-    player.onGround = false;
-  } else if (player.jumps === 1){
-    player.dy = -JUMP_VEL_2;
-    player.jumps = 2;
-  }
+  if(player.jumps===0){ player.dy=-JUMP_VEL_1; player.jumps=1; player.onGround=false; }
+  else if(player.jumps===1){ player.dy=-JUMP_VEL_2; player.jumps=2; }
 }
-
 const startBtn=document.getElementById('startButton');
 const restartBtn=document.getElementById('restartButton');
 const startOverlay=document.getElementById('startScreen');
-
-startBtn.addEventListener('click', startGame);
-restartBtn.addEventListener('click', startGame);
+startBtn.addEventListener('click',startGame);
+restartBtn.addEventListener('click',startGame);
 ['pointerdown','touchend','click'].forEach(t=>{
-  startBtn.addEventListener(t, e=>{ e.preventDefault?.(); startGame(); }, {passive:false});
-  restartBtn.addEventListener(t, e=>{ e.preventDefault?.(); startGame(); }, {passive:false});
-  startOverlay.addEventListener(t, e=>{ e.preventDefault?.(); startGame(); }, {passive:false});
-  document.addEventListener(t, (e)=>{ if(!running){ e.preventDefault?.(); startGame(); }}, {once:true, passive:false});
+  startBtn.addEventListener(t,e=>{e.preventDefault?.();startGame();},{passive:false});
+  restartBtn.addEventListener(t,e=>{e.preventDefault?.();startGame();},{passive:false});
+  startOverlay.addEventListener(t,e=>{e.preventDefault?.();startGame();},{passive:false});
+  document.addEventListener(t,e=>{if(!running){e.preventDefault?.();startGame();}},{once:true,passive:false});
 });
-document.addEventListener('keydown', (e)=>{
+document.addEventListener('keydown',e=>{
   if(e.code==='Space'){ e.preventDefault(); if(!running) startGame(); else jump(); }
   else if(e.code==='KeyR'){ e.preventDefault(); startGame(); }
 });
-canvas.addEventListener('touchstart', (e)=>{ e.preventDefault(); if(!running) startGame(); else jump(); }, {passive:false});
+canvas.addEventListener('touchstart',e=>{e.preventDefault(); if(!running) startGame(); else jump();},{passive:false});
 
-/* ====== leaderboard (hidden while playing) ====== */
+/* leaderboard */
 const API='https://scooter-game-api.vercel.app';
 function loadLeaderboard(){
   fetch(`${API}/api/leaderboard`).then(r=>r.json()).then(rows=>{
@@ -387,18 +288,13 @@ function loadLeaderboard(){
 function saveScore(){
   const initials=(document.getElementById('playerInitials').value||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,3);
   if(!initials){ document.getElementById('gameOverScreen').style.display='none'; return; }
-  fetch(`${API}/api/leaderboard`,{
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({name:initials, score})
-  }).then(()=>loadLeaderboard());
+  fetch(`${API}/api/leaderboard`,{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name:initials, score}) })
+    .then(()=>loadLeaderboard());
 }
-document.getElementById('saveScoreButton').addEventListener('click', saveScore);
-document.getElementById('skipButton').addEventListener('click', ()=>{ document.getElementById('gameOverScreen').style.display='none'; });
+document.getElementById('saveScoreButton').addEventListener('click',saveScore);
+document.getElementById('skipButton').addEventListener('click',()=>{ document.getElementById('gameOverScreen').style.display='none'; });
 
-/* expose for inline onclick */
-window.__start = startGame;
-
-/* initial Top10 for Start screen */
+window.__start=startGame;
 loadLeaderboard();
 </script>
 </body>
