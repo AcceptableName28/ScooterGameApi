@@ -129,7 +129,7 @@ const ctx=canvas.getContext('2d');
 /* declare player BEFORE sizing logic ever touches it */
 let player={ x: 90, y: 0, w: 120, h: 80, dy: 0, onGround: false, jumps: 0 };
 
-let W=960, H=540, floorY=Math.round(H*0.79); /* slightly higher road for visibility */
+let W=960, H=540, floorY=Math.round(H*0.74); /* slightly higher road for visibility */
 function fitCanvasDPR(){
   const rect=canvas.getBoundingClientRect();
   const DPR=Math.max(1,window.devicePixelRatio||1);
@@ -138,7 +138,7 @@ function fitCanvasDPR(){
   ctx.setTransform(DPR,0,0,DPR,0,0);
   W=Math.max(1,Math.round(rect.width));
   H=Math.max(1,Math.round(rect.height));
-  floorY=Math.round(H*0.79);
+  floorY=Math.round(H*0.74);
   if(player && player.y>floorY-player.h){
     player.y=floorY-player.h; player.dy=0; player.onGround=true; player.jumps=0;
   }
@@ -157,9 +157,15 @@ let running=false, score=0;
 let obstacles=[];
 
 /* Slower, friendlier start */
-const SPEED_BASE=4.0;
-const SPEED_MAX =15;      /* your cap */
-let speed=SPEED_BASE;
+const SPEED_BASE = 3.2;    // was 4.0
+const SPEED_MAX  = 15;     // keep your cap
+// …
+const world = {
+  pTallBase:0.14, pTallLate:0.34, tallStreak:0, singleStreak:0, maxTallStreak:1, maxSingleStreak:4,
+  warmupScore:150,
+  rampRate: 0.0018,        // was 0.0025
+  rtSingle:0.90, rtTall:1.05, rtJitter:0.10
+};
 
 /* Your difficulty knobs */
 const world={
@@ -205,10 +211,10 @@ function triangleSpec(tall){
   return { base, height:h };
 }
 function planNextGapPx(v,tall){
-  const pxps=Math.max(1, v*60);
-  const rtBase=tall?world.rtTall:world.rtSingle;
-  const rt=Math.max(0.65, rtBase + ((Math.random()*2-1)*world.rtJitter));
-  const margin=100 + v*6 + (tall?46:0);
+  const pxps = Math.max(1, v*60);
+  const rtBase = tall ? world.rtTall : world.rtSingle;
+  const rt = Math.max(0.65, rtBase + ((Math.random()*2-1)*world.rtJitter));
+  const margin = 120 + v*7 + (tall ? 56 : 12);  // was 100 + v*6 + (tall ? 46 : 0)
   return Math.max(260, Math.round(pxps*rt + margin));
 }
 function spawnObstacle(tall){
