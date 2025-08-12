@@ -131,10 +131,10 @@ let last=performance.now();
 let obstacles=[];
 
 /* speed in px/second (consistent across FPS) */
-const SPEED_BASE_PPS = 150;    // slower, friendlier start
-const SPEED_MAX_PPS  = 1500;    // lower top speed
-const ACCEL_PPS2     = 12;      // gentler acceleration (px/s^2)
-const WARMUP_SEC     = 1.8;    // hold base speed for first ~1.8s
+const SPEED_BASE_PPS = 300;    // slower, friendlier start
+const SPEED_MAX_PPS  = 2000;    // lower top speed
+const ACCEL_PPS2     = 15;      // gentler acceleration (px/s^2)
+const WARMUP_SEC     = .5;    // hold base speed for first ~1.8s
 let  speedPPS        = SPEED_BASE_PPS;
 
 const world={
@@ -146,8 +146,8 @@ const world={
 let distSinceSpawn=0, nextGapPx=620;  // wider first gap
 
 /* jump physics: floatier; double‑jump bigger & slower */
-const GRAVITY_ASC  = 0.38;
-const GRAVITY_DESC = 0.52;
+const GRAVITY_ASC  = 0.30;
+const GRAVITY_DESC = 0.45;
 const JUMP_VEL_1   = 12.2;
 const JUMP_VEL_2   = 12.8;
 
@@ -177,7 +177,7 @@ function decideTall(s){
 function triangleSpec(tall){
   const ramp=Math.min(1, Math.max(0, score/1200));
   const smallMin=28, smallMax=42;
-  const tallMin=42+(50-42)*ramp, tallMax=60+(74-60)*ramp;
+  const tallMin=42+(50-42)*ramp, tallMax=80+(74-80)*ramp;
   const h=tall ? (tallMin+Math.random()*(tallMax-tallMin)) : (smallMin+Math.random()*(smallMax-smallMin));
   const base=h*0.9+Math.random()*8;
   return {base, height:h};
