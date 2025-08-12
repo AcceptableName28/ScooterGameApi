@@ -5,14 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <title>Blue Vespa Scooter Game</title>
 <style>
-  :root {
-    --app-vh: 100vh;         /* real viewport height */
-    --header-h: 150px;       /* height used when leaderboard is visible */
+  :root{
+    --app-vh: 100vh;     /* real viewport height (updated via JS) */
+    --header-h: 110px;   /* space reserved when leaderboard is visible */
   }
 
   html,body{margin:0;padding:0}
   body{
-    background:#cfe9ff;      /* page sky */
+    background:#cfe9ff;
     color:#111;
     font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
     overflow:hidden; display:flex; flex-direction:column; align-items:center;
@@ -37,7 +37,6 @@
   #wrap{ position:relative; width:100%; max-width:720px; }
   canvas{
     display:block; width:100%;
-    /* canvas shows its own sky/road; height adapts to header present/hidden */
     background:linear-gradient(#bfe2ff, #8cc8ff 62%, #63b1ff 62%, #63b1ff 100%);
     height:calc(var(--app-vh,100vh) - var(--header-h) - env(safe-area-inset-bottom));
     min-height:420px; max-height:calc(100vh - env(safe-area-inset-bottom));
@@ -106,12 +105,7 @@
   </div>
 
 <script>
-/* ----- (Optional) tiny error overlay -----
-window.onerror=(m,s,l,c)=>document.body.insertAdjacentHTML('afterbegin',
-`<pre style="position:fixed;inset:8px auto auto 8px;z-index:9999;background:#111;color:#fff;padding:8px 10px;border-radius:8px;max-width:95vw;white-space:pre-wrap">JS ERROR: ${m} at ${s}:${l}:${c}</pre>`);
-------------------------------------------- */
-
-/* 1) Real viewport height (iOS/Firefox toolbars) */
+/* Real viewport height so iOS/Firefox toolbars don’t push things down */
 function setAppVh(){
   const vv=window.visualViewport;
   const h=vv&&vv.height ? vv.height : (window.innerHeight||document.documentElement.clientHeight||0);
@@ -122,14 +116,13 @@ addEventListener('resize', setAppVh, {passive:true});
 addEventListener('orientationchange', setAppVh, {passive:true});
 if(window.visualViewport) window.visualViewport.addEventListener('resize', setAppVh, {passive:true});
 
-/* 2) Canvas & DPR */
 const canvas=document.getElementById('gameCanvas');
 const ctx=canvas.getContext('2d');
 
-/* declare player BEFORE sizing logic ever touches it */
+/* declare player BEFORE any sizing logic */
 let player={ x: 90, y: 0, w: 120, h: 80, dy: 0, onGround: false, jumps: 0 };
 
-let W=960, H=540, floorY=Math.round(H*0.74); /* slightly higher road for visibility */
+let W=960, H=540, floorY=Math.round(H*0.70);  /* raised road -> game sits higher */
 function fitCanvasDPR(){
   const rect=canvas.getBoundingClientRect();
   const DPR=Math.max(1,window.devicePixelRatio||1);
@@ -138,7 +131,7 @@ function fitCanvasDPR(){
   ctx.setTransform(DPR,0,0,DPR,0,0);
   W=Math.max(1,Math.round(rect.width));
   H=Math.max(1,Math.round(rect.height));
-  floorY=Math.round(H*0.74);
+  floorY=Math.round(H*0.70);
   if(player && player.y>floorY-player.h){
     player.y=floorY-player.h; player.dy=0; player.onGround=true; player.jumps=0;
   }
@@ -147,30 +140,22 @@ fitCanvasDPR();
 addEventListener('resize',fitCanvasDPR);
 if(window.visualViewport) window.visualViewport.addEventListener('resize',fitCanvasDPR,{passive:true});
 
-/* 3) Assets */
+/* Assets */
 const vespaImg=new Image();
-vespaImg.src='Blue Vespa Right.png'; // exact name (with spaces)
+vespaImg.src='Blue Vespa Right.png';
 vespaImg.onerror=()=>console.warn('Vespa PNG not found. Check file name/path.');
 
-/* 4) World & tuning */
+/* World & tuning (friendlier) */
 let running=false, score=0;
 let obstacles=[];
 
-/* Slower, friendlier start */
-const SPEED_BASE = 3.2;    // was 4.0
-const SPEED_MAX  = 15;     // keep your cap
-// …
-const world = {
-  pTallBase:0.14, pTallLate:0.34, tallStreak:0, singleStreak:0, maxTallStreak:1, maxSingleStreak:4,
-  warmupScore:150,
-  rampRate: 0.0018,        // was 0.0025
-  rtSingle:0.90, rtTall:1.05, rtJitter:0.10
-};
+const SPEED_BASE=3.0;   // slower start
+const SPEED_MAX =15;
+let speed=SPEED_BASE;
 
-/* Your difficulty knobs */
 const world={
   pTallBase:0.14, pTallLate:0.34, tallStreak:0, singleStreak:0, maxTallStreak:1, maxSingleStreak:4,
-  warmupScore:150, rampRate:0.0025,
+  warmupScore:150, rampRate:0.0016,   // gentler ramp
   rtSingle:0.90, rtTall:1.05, rtJitter:0.10
 };
 
@@ -178,11 +163,11 @@ let distSinceSpawn=0, nextGapPx=520;
 
 const GRAVITY=0.55, JUMP_VEL=10.2;
 
-/* 5) Draw helpers */
+/* Draw helpers */
 function drawRoad(){
   const roadTop=floorY+2;
-  ctx.fillStyle='#2a2a2a'; ctx.fillRect(0, roadTop, W, H-roadTop); /* asphalt */
-  ctx.fillStyle='rgba(255,255,255,.85)';                           /* lane line */
+  ctx.fillStyle='#2a2a2a'; ctx.fillRect(0, roadTop, W, H-roadTop);
+  ctx.fillStyle='rgba(255,255,255,.85)';
   const dashW=28, gap=22, y=roadTop+18;
   for(let x=-((Date.now()/30)% (dashW+gap)); x<W; x+=dashW+gap) ctx.fillRect(x,y,dashW,4);
 }
@@ -191,11 +176,11 @@ function drawVespa(){
   else { ctx.fillStyle='#1e8bff'; ctx.fillRect(player.x, player.y, player.w, player.h); }
 }
 
-/* 6) Obstacles & spacing */
+/* Obstacles & spacing */
 function decideTall(s){
   const t=Math.min(1, Math.max(0, (s - world.warmupScore)/1500));
   let p=world.pTallBase*(1-t) + world.pTallLate*t;
-  if(s<800) p*=0.55;
+  if(s<800) p*=0.55;                      // more single jumps early
   if(world.tallStreak>0) p*=0.5;
   if(world.tallStreak>=world.maxTallStreak) return false;
   if(world.singleStreak>=world.maxSingleStreak) return true;
@@ -211,10 +196,10 @@ function triangleSpec(tall){
   return { base, height:h };
 }
 function planNextGapPx(v,tall){
-  const pxps = Math.max(1, v*60);
-  const rtBase = tall ? world.rtTall : world.rtSingle;
-  const rt = Math.max(0.65, rtBase + ((Math.random()*2-1)*world.rtJitter));
-  const margin = 120 + v*7 + (tall ? 56 : 12);  // was 100 + v*6 + (tall ? 46 : 0)
+  const pxps=Math.max(1, v*60);
+  const rtBase=tall?world.rtTall:world.rtSingle;
+  const rt=Math.max(0.65, rtBase + ((Math.random()*2-1)*world.rtJitter));
+  const margin = 130 + v*7.5 + (tall ? 60 : 12);  // wider gaps as speed rises
   return Math.max(260, Math.round(pxps*rt + margin));
 }
 function spawnObstacle(tall){
@@ -225,19 +210,18 @@ function spawnObstacle(tall){
   distSinceSpawn=0;
 }
 
-/* 7) Core loop */
+/* Core loop */
 function resetGame(){
   score=0; speed=SPEED_BASE; obstacles.length=0;
   world.tallStreak=0; world.singleStreak=0;
-  nextGapPx=420; distSinceSpawn=260;  // first obstacle soon, not immediate
+  nextGapPx=440; distSinceSpawn=280;  // first obstacle not immediate
   player.y=floorY-player.h; player.dy=0; player.onGround=true; player.jumps=0;
 }
 function startGame(){
-  // hide leaderboard during gameplay & shrink header height to give canvas full space
+  // hide leaderboard during gameplay & remove header space
   document.getElementById('leaderboard').classList.add('hidden');
   document.documentElement.style.setProperty('--header-h','0px');
 
-  // refit after toolbar collapse
   fitCanvasDPR(); setTimeout(fitCanvasDPR,60); setTimeout(fitCanvasDPR,260);
 
   document.getElementById('startScreen').style.display='none';
@@ -250,9 +234,9 @@ function endGame(){
   document.getElementById('finalScore').textContent=`Score: ${score}`;
   document.getElementById('gameOverScreen').style.display='flex';
 
-  // show leaderboard again & restore header height
+  // show leaderboard again & restore header space
   document.getElementById('leaderboard').classList.remove('hidden');
-  document.documentElement.style.setProperty('--header-h','150px');
+  document.documentElement.style.setProperty('--header-h','110px');
   setAppVh(); fitCanvasDPR();
 }
 function frame(){
@@ -261,7 +245,7 @@ function frame(){
 
   drawRoad();
 
-  // slow, steady ramp
+  // gentle ramp
   speed = Math.min(SPEED_MAX, SPEED_BASE + world.rampRate*score);
 
   // player physics
@@ -298,7 +282,7 @@ function frame(){
   requestAnimationFrame(frame);
 }
 
-/* 8) Controls & robust starters */
+/* Controls & robust starters */
 function jump(){ if(player.jumps<2){ player.dy=-JUMP_VEL; player.jumps++; player.onGround=false; } }
 
 const startBtn=document.getElementById('startButton');
@@ -319,7 +303,7 @@ document.addEventListener('keydown', (e)=>{
 });
 canvas.addEventListener('touchstart', (e)=>{ e.preventDefault(); if(!running) startGame(); else jump(); }, {passive:false});
 
-/* 9) Leaderboard (hidden during play) */
+/* Leaderboard (hidden during play) */
 const API='https://scooter-game-api.vercel.app';
 function loadLeaderboard(){
   fetch(`${API}/api/leaderboard`).then(r=>r.json()).then(rows=>{
