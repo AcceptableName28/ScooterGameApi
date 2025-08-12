@@ -229,6 +229,11 @@ function resetGame(){
   player.jumps = 0;
 }
 function startGame(){
+  // ensure canvas sizes to the *current* viewport (after the tap)
+  fitCanvasDPR();
+  setTimeout(fitCanvasDPR, 50);   // catch late toolbar animation
+  setTimeout(fitCanvasDPR, 250);  // and one more, just in case
+
   document.getElementById('startScreen').style.display = 'none';
   document.getElementById('gameOverScreen').style.display = 'none';
   resetGame();
@@ -338,6 +343,19 @@ function saveScore(){
 }
 document.getElementById('saveScoreButton').addEventListener('click', saveScore);
 document.getElementById('skipButton').addEventListener('click', ()=>{ document.getElementById('gameOverScreen').style.display='none'; });
+
+// ---- Start on first interaction anywhere (pointer-first, most reliable on Firefox iOS)
+function startOnce(e){
+  if (!running) {
+    if (e && e.preventDefault) e.preventDefault();
+    startGame();
+  }
+}
+['pointerdown','pointerup','touchstart','click'].forEach(type => {
+  document.addEventListener(type, startOnce, { once:true, passive:false });
+  canvas.addEventListener(type, startOnce, { once:true, passive:false });
+  document.getElementById('startScreen').addEventListener(type, startOnce, { once:true, passive:false });
+});
 
 /* Expose a bulletproof starter for inline onclick fallback */
 window.__start = startGame;
