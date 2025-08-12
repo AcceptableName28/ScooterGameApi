@@ -8,28 +8,37 @@
   :root { --sky:#cfe9ff; --road:#2a2a2a; --ink:#111; }
   html,body{height:100%;margin:0;background:var(--sky);font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
   #page{display:grid;grid-template-rows:auto 1fr;min-height:100vh}
-  .board{padding:10px 14px 0 14px}
-  .board h2{margin:8px 0 6px 0;font-size:16px}
-  .board ol{margin:0;padding-left:20px;display:grid;gap:2px;max-width:960px}
+  .board{padding:8px 12px 0 12px}
+  .board h2{margin:6px 0 4px 0;font-size:15px}
+  .board ol{margin:0;padding-left:18px;display:grid;gap:2px;max-width:960px}
   .board li{font-weight:700;color:var(--ink);display:flex;justify-content:space-between}
   .board .muted{opacity:.65;font-weight:600}
   #wrap{display:grid;place-items:center}
   canvas{background:linear-gradient(#cfe9ff,#a6d4ff 60%);box-shadow:0 10px 40px rgba(0,0,0,.25);border-radius:14px;width:960px;height:540px;touch-action:manipulation}
   .overlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.85);text-align:center;z-index:10}
-  .card{background:#fff;border-radius:14px;box-shadow:0 12px 36px rgba(0,0,0,.2);padding:20px 28px;min-width:320px}
+  .card{background:#fff;border-radius:14px;box-shadow:0 12px 36px rgba(0,0,0,.2);padding:20px 28px;min-width:320px;max-width:92vw}
   .btn{display:inline-block;background:#111;color:#fff;padding:10px 16px;border-radius:10px;font-weight:800;margin-top:10px;text-decoration:none}
   kbd{background:#111;color:#fff;border-radius:6px;padding:3px 6px;font-weight:700}
-  .row{display:flex;gap:10px;justify-content:center;margin-top:10px}
+  .row{display:flex;gap:10px;justify-content:center;margin-top:10px;flex-wrap:wrap}
   .field{display:flex;justify-content:center;gap:8px;margin-top:10px}
   input.initials{font-size:28px;text-transform:uppercase;letter-spacing:6px;width:140px;text-align:center;
     padding:8px 10px;border:2px solid #111;border-radius:10px;outline:none}
   .hint{font-size:12px;color:#444;margin-top:6px}
   body { -webkit-tap-highlight-color: transparent; }
+
+  /* ——— Mobile layout: hide top bar during play to push canvas up ——— */
+  @media (max-width: 768px){
+    #page{grid-template-rows:0 1fr;} /* collapse the board row */
+    .board{display:none;}            /* hide global board while playing */
+    canvas{width:100vw;height:auto;max-width:960px;aspect-ratio:16/9;}
+    .card{padding:18px}
+  }
 </style>
 </head>
 <body>
 <div id="page">
-  <div class="board">
+  <!-- Desktop/large: visible. Mobile: hidden during gameplay (we show a copy at Game Over) -->
+  <div class="board" id="topBoard">
     <h2>🏁 Top 10 Scores</h2>
     <ol id="lb"></ol>
     <div class="muted" id="lbSub">Loading…</div>
@@ -50,8 +59,10 @@
 
 <div id="gameOver" class="overlay" style="display:none">
   <div class="card">
-    <h2 style="margin:0 0 8px">Game Over</h2>
-    <div>Score: <span id="finalScore">0</span> · Best: <span id="finalBest">0</span></div>
+    <h2 style="margin:0 8px 8px">Game Over</h2>
+    <div style="margin-bottom:8px">Score: <span id="finalScore">0</span> · Best: <span id="finalBest">0</span></div>
+
+    <!-- Initials entry -->
     <div id="qualifyBox" style="display:none">
       <div class="field">
         <input id="initials" class="initials" maxlength="3" placeholder="AAA" autocomplete="off" spellcheck="false">
@@ -62,6 +73,13 @@
         <a href="#" id="skipBtn" class="btn" style="background:#666">Skip</a>
       </div>
     </div>
+
+    <!-- Mobile-only: show Top 10 here so you don’t scroll up -->
+    <div id="lbGO" style="display:none; margin-top:14px; text-align:left">
+      <div style="font-weight:800;margin-bottom:6px">🏁 Top 10</div>
+      <ol id="lb2" style="margin:0;padding-left:18px;display:grid;gap:2px;max-height:38vh;overflow:auto"></ol>
+    </div>
+
     <div class="row" id="restartRow">
       <a href="#" id="restartBtn" class="btn">Restart (R)</a>
     </div>
@@ -95,9 +113,9 @@ const ctx = canvas.getContext('2d', { alpha:true });
 let DPR = Math.max(1, Math.floor(window.devicePixelRatio || 1));
 function resizeCanvas(){
   DPR = Math.max(1, Math.floor(window.devicePixelRatio || 1));
-  const cssW = 960, cssH = 540;
-  canvas.style.width = cssW + 'px';
-  canvas.style.height = cssH + 'px';
+  // Canvas CSS size handled by CSS; just set internal res & scaling
+  const cssW = canvas.clientWidth || 960;
+  const cssH = canvas.clientHeight || 540;
   canvas.width = cssW * DPR;
   canvas.height = cssH * DPR;
   ctx.setTransform(DPR,0,0,DPR,0,0);
@@ -116,8 +134,11 @@ const qualifyBox  = document.getElementById('qualifyBox');
 const initialsEl  = document.getElementById('initials');
 const saveScoreBtn= document.getElementById('saveScoreBtn');
 const skipBtn     = document.getElementById('skipBtn');
+const topBoard    = document.getElementById('topBoard');
 const lbEl        = document.getElementById('lb');
 const lbSub       = document.getElementById('lbSub');
+const lbGO        = document.getElementById('lbGO');
+const lb2El       = document.getElementById('lb2');
 
 /* ===== Sprite (PNG) ===== */
 const vespaImg = new Image();
@@ -149,9 +170,7 @@ const world = {
   // Difficulty only via speed ramp:
   rampK: 0.020
 };
-function effectiveSpeed(){
-  return Math.min(world.maxSpeed, world.baseSpeed + world.score * world.rampK);
-}
+function effectiveSpeed(){ return Math.min(world.maxSpeed, world.baseSpeed + world.score * world.rampK); }
 
 /* ===== Input ===== */
 const keys = { up:false, space:false };
@@ -159,12 +178,7 @@ const KEY  = { UP:38, SPACE:32, R:82 };
 
 /* ===== Player ===== */
 const PLAYER_W = 120, PLAYER_H = 80;
-const player = {
-  x: W*0.18, y: floorY, vy: 0,
-  w: PLAYER_W, h: PLAYER_H,
-  onGround: true, jumps: 0,
-  coyote: 0, jumpBuffer: 0, usedDouble: false
-};
+const player = { x: W*0.18, y: floorY, vy: 0, w: PLAYER_W, h: PLAYER_H, onGround: true, jumps: 0, coyote: 0, jumpBuffer: 0, usedDouble: false };
 
 /* ===== Obstacles (triangles) ===== */
 const TRI_COLORS = ['#ff6b6b','#ffd166','#06d6a0','#118ab2','#8338ec','#ef476f','#f9c74f','#90be6d'];
@@ -176,22 +190,21 @@ function spawnTriangleAt(x){
   const color = TRI_COLORS[(Math.random()*TRI_COLORS.length)|0];
   obstacles.push({ x, y: floorY, base, height: high, color });
 }
-function planNextSpawn(){
-  world.spawnDist = randInt(world.gapMin, world.gapMax);
-}
+function planNextSpawn(){ world.spawnDist = randInt(world.gapMin, world.gapMax); }
 
-/* ===== Leaderboard ===== */
-async function renderLB(){
+/* ===== Leaderboard (render to top bar or to Game Over card) ===== */
+async function renderLB(targetOl = lbEl){
   const lb = (await apiGetTop10()) || [];
-  lbEl.innerHTML = '';
+  targetOl.innerHTML = '';
   lb.forEach((e,i)=>{
     const li = document.createElement('li');
     const name = (e.name||'---').toUpperCase().slice(0,3);
     li.innerHTML = `<span>${i+1}.) ${name}</span><span>${e.score}</span>`;
-    lbEl.appendChild(li);
+    targetOl.appendChild(li);
   });
-  lbSub.textContent = lb.length ? 'Global leaderboard' : 'No scores yet — be the first!';
+  if(targetOl === lbEl) lbSub.textContent = lb.length ? 'Global leaderboard' : 'No scores yet — be the first!';
 }
+// Initial render for desktop / large screens
 renderLB();
 
 /* ===== State helpers ===== */
@@ -204,26 +217,41 @@ function resetGame(){
   player.jumps=0; player.usedDouble=false; player.coyote=0; player.jumpBuffer=0;
   obstacles.length=0; hardResetInput();
 }
-function startGame(){ resetGame(); world.alive = true; startScreen.style.display='none'; gameOverEl.style.display='none'; }
+function startGame(){
+  resetGame(); world.alive = true;
+  startScreen.style.display='none'; gameOverEl.style.display='none';
+  // On mobile, keep top board hidden during play (CSS handles it),
+  // but if it was shown in last Game Over, hide the GO leaderboard copy:
+  lbGO.style.display = 'none';
+}
 let awaitingInitials = false;
 
 /* ===== Game over & save flow ===== */
 function gameOver(){
   world.alive = false;
   finalScore.textContent = Math.floor(world.score);
-  if(world.score > world.best){
-    world.best = Math.floor(world.score);
-    localStorage.setItem('vespa_best', world.best);
-  }
+  if(world.score > world.best){ world.best = Math.floor(world.score); localStorage.setItem('vespa_best', world.best); }
   finalBest.textContent = world.best;
 
   (async()=>{
+    // Decide if qualifies
     const lb = (await apiGetTop10()) || [];
     const minToBeat = lb.length < 10 ? 0 : (lb[9]?.score || 0);
     const qualifies = Math.floor(world.score) > minToBeat || lb.length < 10;
     qualifyBox.style.display = qualifies ? 'block' : 'none';
     awaitingInitials = qualifies;
     initialsEl.value = '';
+
+    // On small screens, show a compact Top 10 inside the card
+    const isMobile = window.matchMedia('(max-width: 768px)').matches;
+    if(isMobile){
+      lbGO.style.display = 'block';
+      await renderLB(lb2El);
+    } else {
+      lbGO.style.display = 'none';
+      await renderLB(lbEl);
+    }
+
     gameOverEl.style.display='flex';
     if(qualifies) setTimeout(()=>initialsEl.focus(), 80);
   })();
@@ -246,19 +274,15 @@ addEventListener('keydown', e=>keyHandler(e,true));
 addEventListener('keyup',   e=>keyHandler(e,false));
 startBtn.addEventListener('click', e=>{ e.preventDefault(); startGame(); });
 
-/* ===== Tap/Touch (canvas-only, doesn’t steal overlay taps) ===== */
+/* ===== Tap/Touch (canvas-only, don’t steal overlay taps) ===== */
 const tapSurface = canvas;
-function handleTap(){
-  if(!world.alive && !awaitingInitials){ startGame(); return; }
-  if(world.alive){ player.jumpBuffer = BUFFER_FRAMES; }
-}
+function handleTap(){ if(!world.alive && !awaitingInitials){ startGame(); return; } if(world.alive){ player.jumpBuffer = BUFFER_FRAMES; } }
 function onCanvasPointerDown(e){
   if(e.pointerType === 'mouse') return;
   if(gameOverEl.style.display === 'flex') return;
   if(startScreen.style.display !== 'none'){ e.preventDefault(); handleTap(); return; }
   if(awaitingInitials) return;
-  e.preventDefault();
-  handleTap();
+  e.preventDefault(); handleTap();
 }
 function onCanvasTouchStart(e){
   if(gameOverEl.style.display === 'flex' || awaitingInitials) return;
@@ -291,7 +315,7 @@ async function trySaveIfNeeded(){
   try{
     setSaving(true);
     await apiSaveScore(name, Math.floor(world.score));
-    await renderLB();
+    await renderLB(lbEl); // refresh desktop bar for when user returns there
     return true;
   }catch(err){
     alert('Save failed: ' + (err.message || err));
@@ -300,11 +324,7 @@ async function trySaveIfNeeded(){
     setSaving(false);
   }
 }
-async function doRestartFlow(){
-  await trySaveIfNeeded();
-  awaitingInitials=false;
-  startGame();
-}
+async function doRestartFlow(){ await trySaveIfNeeded(); awaitingInitials=false; startGame(); }
 saveScoreBtn.addEventListener('click', async e=>{ e.preventDefault(); await doRestartFlow(); });
 skipBtn     .addEventListener('click', async e=>{ e.preventDefault(); awaitingInitials=false; startGame(); });
 restartBtn  .addEventListener('click', async e=>{ e.preventDefault(); await doRestartFlow(); });
@@ -322,7 +342,6 @@ function handlePlayerControls(){
 function update(){
   world.t++;
   if(world.alive){
-    // Difficulty by speed only
     world.speed = effectiveSpeed();
 
     handlePlayerControls();
