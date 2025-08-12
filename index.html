@@ -131,10 +131,11 @@ let last=performance.now();
 let obstacles=[];
 
 /* speed in px/second (consistent across FPS) */
-const SPEED_BASE_PPS = 180;      // comfy start (~3 px/frame @60fps)
-const SPEED_MAX_PPS  = 900;      // cap (~15 px/frame @60fps)
-const ACCEL_PPS2     = 8;        // gentle acceleration (px/s^2)
-let speedPPS         = SPEED_BASE_PPS;
+const SPEED_BASE_PPS = 150;    // slower, friendlier start
+const SPEED_MAX_PPS  = 800;    // lower top speed
+const ACCEL_PPS2     = 6;      // gentler acceleration (px/s^2)
+const WARMUP_SEC     = 1.8;    // hold base speed for first ~1.8s
+let  speedPPS        = SPEED_BASE_PPS;
 
 const world={
   pTallBase:0.14, pTallLate:0.34, tallStreak:0, singleStreak:0, maxTallStreak:1, maxSingleStreak:4,
@@ -142,13 +143,13 @@ const world={
   rtSingle:0.90, rtTall:1.05, rtJitter:0.10
 };
 
-let distSinceSpawn=0, nextGapPx=560;  // first gap ~3s at base speed
+let distSinceSpawn=0, nextGapPx=620;  // wider first gap
 
-/* jump physics: light ascent, heavier descent for snappy feel */
-const GRAVITY_ASC  = 0.44;
-const GRAVITY_DESC = 0.60;
-const JUMP_VEL_1   = 11.6;
-const JUMP_VEL_2   = 11.0;
+/* jump physics: floatier; double‑jump bigger & slower */
+const GRAVITY_ASC  = 0.38;
+const GRAVITY_DESC = 0.52;
+const JUMP_VEL_1   = 12.2;
+const JUMP_VEL_2   = 12.8;
 
 /* ===== draw helpers ===== */
 function drawRoad(){
@@ -228,7 +229,7 @@ function resetGame(){
   speedPPS=SPEED_BASE_PPS;
   obstacles.length=0;
   world.tallStreak=0; world.singleStreak=0;
-  nextGapPx=560; distSinceSpawn=0;
+  nextGapPx=620; distSinceSpawn=0;     // wider first gap
   player.y=floorY-player.h; player.dy=0; player.onGround=true; player.jumps=0;
   last=performance.now();
 }
@@ -253,7 +254,7 @@ function endGame(){
   setAppVh(); fitCanvasDPR();
 }
 
-/* ===== main loop (time‑based) ===== */
+/* ===== main loop (time‑based with warmup) ===== */
 function frame(){
   if(!running) return;
 
@@ -262,9 +263,14 @@ function frame(){
   last=now;
   elapsed += dt;
 
-  // ramp speed gently with time
-  speedPPS = Math.min(SPEED_MAX_PPS, SPEED_BASE_PPS + ACCEL_PPS2*elapsed);
-  const dx = speedPPS * dt; // pixels to move this frame
+  // consistent opening: hold base speed for WARMUP_SEC, then ramp
+  if (elapsed < WARMUP_SEC) {
+    speedPPS = SPEED_BASE_PPS;
+  } else {
+    const t = elapsed - WARMUP_SEC;
+    speedPPS = Math.min(SPEED_MAX_PPS, SPEED_BASE_PPS + ACCEL_PPS2 * t);
+  }
+  const dx = speedPPS * dt; // pixels this frame
 
   ctx.clearRect(0,0,canvas.width,canvas.height);
   drawRoad();
@@ -307,11 +313,11 @@ function frame(){
   scoreTime += dt*10;                   // ~10 pts/sec
   score = Math.max(0, Math.floor(scoreTime + scoreBonus));
 
-  // HUD (white with subtle outline)
+  // HUD (white with stronger outline)
   ctx.save();
   ctx.fillStyle='#ffffff';
   ctx.font='18px system-ui, sans-serif';
-  ctx.lineWidth=4; ctx.strokeStyle='rgba(0,0,0,.35)'; ctx.strokeText(`Score: ${score}`, 12, 28);
+  ctx.lineWidth=5; ctx.strokeStyle='rgba(0,0,0,.5)'; ctx.strokeText(`Score: ${score}`, 12, 28);
   ctx.fillText(`Score: ${score}`, 12, 28);
   ctx.restore();
 
