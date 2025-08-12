@@ -59,6 +59,12 @@
   </div>
 
 <script>
+window.onerror = (msg, src, line, col, err) => {
+  document.body.insertAdjacentHTML('afterbegin',
+    `<pre style="position:fixed;inset:8px auto auto 8px;z-index:9999;background:#111;color:#fff;padding:8px 10px;border-radius:8px;max-width:95vw;white-space:pre-wrap">
+JS ERROR: ${msg}
+at ${src}:${line}:${col}</pre>`);
+};
 /* ---------- viewport sizing (simple & reliable) ---------- */
 function setAppVh(){
   const vv = window.visualViewport;
