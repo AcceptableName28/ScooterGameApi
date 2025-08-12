@@ -2,7 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
 <title>Scooter Game</title>
 <style>
   :root { --app-vh: 100vh; }
@@ -85,9 +86,8 @@
     #gameContainer{ height: var(--app-vh, 100vh); }
     canvas{
       width: 100vw;
-      /* Use the bigger of 60vh or real vh, minus a small padding */
       height: calc( max(60vh, var(--app-vh, 100vh)) - 20px );
-      min-height: 300px;   /* absolute floor */
+      min-height: 300px;
       max-height: 100vh;
       aspect-ratio: auto;
     }
@@ -158,19 +158,15 @@ function resizeCanvas(){
   const rect = canvas.getBoundingClientRect();
   let cssW = Math.max(1, Math.floor(rect.width || window.innerWidth));
   let cssH = Math.max(1, Math.floor(rect.height || window.innerHeight));
-
-  /* guard against iOS first-paint zeros */
   if (cssH < 120) {
     const vh = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--app-vh')) || window.innerHeight || 540;
     cssH = Math.max(300, Math.floor(vh - 20));
   }
-
   const DPR = Math.max(1, Math.floor(window.devicePixelRatio || 1));
   canvas.width  = cssW * DPR;
   canvas.height = cssH * DPR;
   ctx.setTransform(DPR,0,0,DPR,0,0);
   ctx.imageSmoothingEnabled = true;
-
   W = cssW; H = cssH; floorY = H * 0.78;
   if (player && player.y > floorY) player.y = floorY;
 }
@@ -184,15 +180,32 @@ let W = 960, H = 540;
 let floorY = H * 0.78;
 
 const world = {
-  speed: 8,
-  baseSpeed: 8,
-  maxSpeed: 20,
+  // slow, enjoyable difficulty via speed only
+  speed: 6,
+  baseSpeed: 6,
+  maxSpeed: 13.5,
   score: 0,
   alive: false,
-  spawnDist: 600,     // first gap
-  gapMin: 520,
-  gapMax: 760,
-  rampK: 0.020        // difficulty by speed only
+
+  // distance until next spawn (pixels) – computed each spawn
+  spawnDist: 600,
+
+  // RANDOM obstacle mix with anti‑streak rules
+  pTallBase: 0.32,
+  pTallLate: 0.42,
+  tallStreak: 0,
+  singleStreak: 0,
+  maxTallStreak: 2,
+  maxSingleStreak: 3,
+
+  // snappy rhythm: target reaction times (seconds)
+  rtSingle: 0.90,
+  rtTall:   1.05,
+  rtJitter: 0.10,
+
+  // long, gentle ramp settings
+  warmupScore: 1000,
+  rampRate:   0.0010
 };
 
 const player = { x: 120, y: floorY, vy: 0, w: 120, h: 80, onGround: true };
@@ -255,11 +268,96 @@ function renderLB(list){
   lbSub.textContent = list.length ? 'Global leaderboard' : 'No scores yet — be the first!';
 }
 
+/* ================= Difficulty ramp ================= */
+function speedForScore(s) {
+  if (s < world.warmupScore) return world.baseSpeed;
+  const span = world.maxSpeed - world.baseSpeed;
+  const t = s - world.warmupScore;
+  return world.baseSpeed + span * (1 - Math.exp(-world.rampRate * t));
+}
+
+/* ================= Spawn helpers (random but fair) ================= */
+function decideTall(score) {
+  // blend toward late-game probability
+  const lateBlend = Math.min(1, Math.max(0, (score - world.warmupScore) / 1500));
+  let pTall = world.pTallBase * (1 - lateBlend) + world.pTallLate * lateBlend;
+
+  // anti‑streak
+  if (world.tallStreak   >= world.maxTallStreak)   return false;
+  if (world.singleStreak >= world.maxSingleStreak) return true;
+
+  return Math.random() < pTall;
+}
+
+function chooseTriangleSpec(isTall) {
+  const smallHmin = 52,  smallHmax = 92;   // single-jump
+  const tallHmin  = 112, tallHmax  = 160;  // double-jump
+  const height = isTall
+    ? tallHmin  + Math.random() * (tallHmax  - tallHmin)
+    : smallHmin + Math.random() * (smallHmax - smallHmin);
+  const base = 44 + Math.random() * 54;
+  return { base, height };
+}
+
+// Keep reaction time roughly constant by widening gaps as speed rises
+function planNextSpawnDistance(currentSpeed, isTall) {
+  const rtBase = isTall ? world.rtTall : world.rtSingle;
+  const jitter = (Math.random()*2 - 1) * world.rtJitter;
+  const rt = Math.max(0.65, rtBase + jitter);
+  const margin = 70 + currentSpeed * 5;
+  return Math.max(220, currentSpeed * (rt * 60) + margin);
+}
+
+function spawnTriangle(){
+  const isTall = decideTall(world.score);
+  const spec = chooseTriangleSpec(isTall);
+  const color = TRI_COLORS[(Math.random()*TRI_COLORS.length)|0];
+  obstacles.push({ x: W + 40, y: floorY, base: spec.base, height: spec.height, color });
+
+  // update streaks
+  if (isTall) { world.tallStreak++; world.singleStreak = 0; }
+  else        { world.singleStreak++; world.tallStreak  = 0; }
+
+  // schedule next gap (bias by current choice for natural cadence)
+  world.spawnDist = planNextSpawnDistance(world.speed, isTall);
+}
+
+/* ================= Collision helpers ================= */
+function getPlayerBounds(){
+  // tighter Vespa: ~76% width, ~78% height, lifted slightly
+  const w = player.w * 0.76;
+  const h = player.h * 0.78;
+  const x = player.x - w/2;
+  const y = (player.y - player.h) + (player.h - h) - 4;
+  return { x, y, w, h };
+}
+function triTopY(tri, x){
+  const x0 = tri.x, x2 = tri.x + tri.base;
+  if (x <= x0 || x >= x2) return Infinity;
+  const xc = (x0 + x2) * 0.5;
+  const dx = Math.abs(x - xc);
+  const t = 1 - (dx / (tri.base * 0.5));  // 0 at edges -> 1 center
+  return tri.y - tri.height * Math.max(0, Math.min(1, t));
+}
+function rectHitsTriangle(rect, tri){
+  if (rect.x + rect.w <= tri.x || rect.x >= tri.x + tri.base) return false;
+  const xFront = Math.min(rect.x + rect.w, tri.x + tri.base - 0.5);
+  const xMid   = Math.max(rect.x + rect.w - 10, rect.x + rect.w * 0.5);
+  const xBack  = Math.max(rect.x + 6, rect.x);
+  const yTopF = triTopY(tri, xFront);
+  const yTopM = triTopY(tri, xMid);
+  const yTopB = triTopY(tri, xBack);
+  const yBottom = rect.y + rect.h;
+  return (yBottom > yTopF) || (yBottom > yTopM) || (yBottom > yTopB);
+}
+
 /* ================= Control ================= */
 function reset(){
   world.score = 0;
   world.speed = world.baseSpeed;
   world.spawnDist = 600;
+  world.tallStreak = 0;
+  world.singleStreak = 0;
   obstacles.length = 0;
   player.x = Math.max(120, 0.18 * W);
   player.y = floorY; player.vy = 0; player.onGround = true;
@@ -332,49 +430,10 @@ submitBtn.addEventListener('click', async ()=>{
 });
 skipBtn.addEventListener('click', ()=>{ scoreboard.style.display='none'; });
 
-/* ================= Spawning & helpers ================= */
-function randInt(a,b){ return (a + Math.random()*(b-a))|0; }
-function planNextSpawn(){ world.spawnDist = randInt(world.gapMin, world.gapMax); }
-function spawnTriangle(){
-  const base  = 38 + Math.random()*48;
-  const high  = 44 + Math.random()*90;
-  const color = TRI_COLORS[(Math.random()*TRI_COLORS.length)|0];
-  obstacles.push({ x: W + 40, y: floorY, base, height: high, color });
-}
-
-/* ===== Collision helpers: tighter Vespa + triangle-aware check ===== */
-function getPlayerBounds(){
-  // ~76% width, ~78% height, lifted slightly so wheels/air don’t count
-  const w = player.w * 0.76;
-  const h = player.h * 0.78;
-  const x = player.x - w/2;
-  const y = (player.y - player.h) + (player.h - h) - 4;
-  return { x, y, w, h };
-}
-function triTopY(tri, x){
-  const x0 = tri.x, x2 = tri.x + tri.base;
-  if (x <= x0 || x >= x2) return Infinity;
-  const xc = (x0 + x2) * 0.5;
-  const dx = Math.abs(x - xc);
-  const t = 1 - (dx / (tri.base * 0.5)); // 0 at edges -> 1 center
-  return tri.y - tri.height * Math.max(0, Math.min(1, t));
-}
-function rectHitsTriangle(rect, tri){
-  if (rect.x + rect.w <= tri.x || rect.x >= tri.x + tri.base) return false;
-  const xFront = Math.min(rect.x + rect.w, tri.x + tri.base - 0.5);
-  const xMid   = Math.max(rect.x + rect.w - 10, rect.x + rect.w * 0.5);
-  const xBack  = Math.max(rect.x + 6, rect.x);
-  const yTopF = triTopY(tri, xFront);
-  const yTopM = triTopY(tri, xMid);
-  const yTopB = triTopY(tri, xBack);
-  const yBottom = rect.y + rect.h;
-  return (yBottom > yTopF) || (yBottom > yTopM) || (yBottom > yTopB);
-}
-
 /* ================= Game loop ================= */
 function update(){
-  // Difficulty by speed only
-  world.speed = Math.min(world.maxSpeed, world.baseSpeed + world.score * world.rampK);
+  // Slow, long difficulty ramp
+  world.speed = Math.min(world.maxSpeed, speedForScore(world.score));
 
   if(world.alive){
     // Jump logic (coyote + buffer + double)
@@ -396,9 +455,9 @@ function update(){
       const o = obstacles[i]; o.x -= world.speed; if(o.x + o.base < -120) obstacles.splice(i,1);
     }
 
-    // Spawn: single triangle per cycle; spacing via distance
+    // Spawn with reaction‑time based gaps
     world.spawnDist -= world.speed;
-    if(world.spawnDist <= 0){ spawnTriangle(); planNextSpawn(); }
+    if(world.spawnDist <= 0){ spawnTriangle(); }
 
     // Score over time
     world.score += 0.24 + world.speed*0.013;
@@ -432,7 +491,7 @@ function draw(){
     ctx.fillRect(xx2, floorY+60, stripeW, stripeH);
   }
 
-  // Obstacles (triangles)
+  // Triangles
   for(const o of obstacles){
     ctx.fillStyle=o.color; ctx.beginPath();
     const x0=Math.round(o.x), y0=Math.round(o.y);
