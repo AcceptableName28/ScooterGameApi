@@ -353,8 +353,43 @@ function spawnTriangle(){
   obstacles.push({ x: W + 40, y: floorY, base, height: high, color });
 }
 
+// y-coordinate of the triangle's top edge at a given x (isosceles pointing up)
+function triTopY(tri, x){
+  const x0 = tri.x;
+  const x2 = tri.x + tri.base;
+  if (x <= x0 || x >= x2) return Infinity; // outside triangle horizontally
+  const xc = (x0 + x2) * 0.5;
+  const dx = Math.abs(x - xc);
+  const t = 1 - (dx / (tri.base * 0.5)); // 0 at edges -> 1 at center
+  return tri.y - tri.height * Math.max(0, Math.min(1, t));
+}
+
+// Rect vs triangle (samples the front/bottom of the Vespa hitbox against the sloped top)
+function rectHitsTriangle(rect, tri){
+  // quick horizontal reject
+  if (rect.x + rect.w <= tri.x || rect.x >= tri.x + tri.base) return false;
+
+  // sample a few x positions near the Vespa's front/bottom edge
+  const xFront = Math.min(rect.x + rect.w, tri.x + tri.base - 0.5);
+  const xMid   = Math.max(rect.x + rect.w - 10, rect.x + rect.w * 0.5);
+  const xBack  = Math.max(rect.x + 6, rect.x);
+
+  const yTopF = triTopY(tri, xFront);
+  const yTopM = triTopY(tri, xMid);
+  const yTopB = triTopY(tri, xBack);
+
+  const yBottom = rect.y + rect.h;
+
+  // Collision only if the Vespa's bottom actually crosses the triangle's top line
+  return (yBottom > yTopF) || (yBottom > yTopM) || (yBottom > yTopB);
+}
+// Tighter Vespa hitbox: ~76% width, ~78% height, lifted slightly
 function getPlayerBounds(){
-  return { x: player.x - player.w*0.45, y: player.y - player.h, w: player.w*0.9, h: player.h*0.95 };
+  const w = player.w * 0.76;
+  const h = player.h * 0.78;
+  const x = player.x - w/2;
+  const y = (player.y - player.h) + (player.h - h) - 4; // lift a hair so wheels don't count
+  return { x, y, w, h };
 }
 function rectsOverlap(a,b){ return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y; }
 
@@ -389,13 +424,18 @@ function update(){
     // Score over time (slightly boosted by speed)
     world.score += 0.24 + world.speed*0.013;
 
-    // Collision (AABB vs triangle bbox)
-    const pb = getPlayerBounds();
-    for(const o of obstacles){
-      const ob = { x:o.x, y:o.y - o.height, w:o.base, h:o.height };
-      if(rectsOverlap(pb, ob)){ endGame(); break; }
-    }
+// Collision (triangle-aware)
+const pb = getPlayerBounds();
+for (const o of obstacles) {
+  // fast bbox test first
+  const ob = { x:o.x, y:o.y - o.height, w:o.base, h:o.height };
+  const bboxOverlap = pb.x < ob.x + ob.w && pb.x + pb.w > ob.x &&
+                      pb.y < ob.y + ob.h && pb.y + pb.h > ob.y;
+  if (bboxOverlap && rectHitsTriangle(pb, o)) {
+    endGame();
+    break;
   }
+}
 
   draw();
   requestAnimationFrame(update);
