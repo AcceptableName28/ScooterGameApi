@@ -1,229 +1,433 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Scooter Game</title>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Vespa Jump</title>
 <style>
-  html, body {
-    margin: 0;
-    padding: 0;
-    background: #222;
-    overflow: hidden;
-    height: 100%;
-    font-family: sans-serif;
-    color: white;
+  :root { --sky:#cfe9ff; --road:#2a2a2a; --ink:#111; }
+
+  html,body{
+    height:100%; margin:0; background:var(--sky);
+    font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+    -webkit-tap-highlight-color: transparent;
   }
-  canvas {
-    display: block;
-    background: #333;
-    margin: 0 auto;
+
+  #page{display:grid;grid-template-rows:auto 1fr;min-height:100vh}
+
+  /* Desktop/large: show leaderboard above canvas */
+  .board{padding:10px 14px 0 14px}
+  .board h2{margin:8px 0 6px 0;font-size:16px}
+  .board ol{margin:0;padding-left:20px;display:grid;gap:2px;max-width:960px}
+  .board li{font-weight:700;color:var(--ink);display:flex;justify-content:space-between}
+  .board .muted{opacity:.65;font-weight:600}
+
+  #wrap{display:grid;place-items:center}
+  canvas#game{
+    background:linear-gradient(#cfe9ff,#a6d4ff 60%);
+    box-shadow:0 10px 40px rgba(0,0,0,.25);
+    border-radius:14px;
+    width:960px; height:540px; /* desktop default */
+    touch-action: manipulation; /* removes 300ms delay */
   }
-  #ui {
-    position: absolute;
-    top: 10px;
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 2;
-    text-align: center;
+
+  .overlay{
+    position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
+    background:rgba(255,255,255,.85); text-align:center; z-index:10
   }
-  #scoreboard {
-    display: none;
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    background: rgba(0,0,0,0.8);
-    padding: 1em;
-    border-radius: 10px;
+  .card{
+    background:#fff; border-radius:14px; box-shadow:0 12px 36px rgba(0,0,0,.2);
+    padding:20px 28px; min-width:320px; max-width:92vw
   }
-  @media (max-width: 768px) {
-    canvas {
-      width: 100vw;
-      height: calc(var(--app-vh, 100vh) - 16px);
-      aspect-ratio: auto;
+  .btn{display:inline-block;background:#111;color:#fff;padding:10px 16px;border-radius:10px;
+       font-weight:800;margin-top:10px;text-decoration:none}
+  kbd{background:#111;color:#fff;border-radius:6px;padding:3px 6px;font-weight:700}
+  .row{display:flex;gap:10px;justify-content:center;margin-top:10px;flex-wrap:wrap}
+  .field{display:flex;justify-content:center;gap:8px;margin-top:10px}
+  input.initials{
+    font-size:28px;text-transform:uppercase;letter-spacing:6px;width:140px;text-align:center;
+    padding:8px 10px;border:2px solid #111;border-radius:10px;outline:none
+  }
+  .hint{font-size:12px;color:#444;margin-top:6px}
+
+  /* ---------- Mobile tweaks: game fits visible window; overlays scroll if tall ---------- */
+  @media (max-width: 768px){
+    #page{grid-template-rows:0 1fr;} /* hide top board row to push game higher */
+    .board{display:none;}
+    canvas#game{
+      width:100vw;
+      height:calc(var(--app-vh, 100vh) - 16px); /* use real viewport height from JS */
+      max-width:100%; max-height:100%; aspect-ratio:auto;
     }
+    .overlay{align-items:flex-start; overflow:auto; padding:16px 0;}
+    .card{margin:auto;}
   }
 </style>
 </head>
 <body>
-<div id="ui">
-  <h1>🏍 Scooter Game</h1>
-  <div id="score">Score: 0</div>
+<div id="page">
+  <div class="board" id="topBoard">
+    <h2>🏁 Top 10 Scores</h2>
+    <ol id="lb"></ol>
+    <div class="muted" id="lbSub">Loading…</div>
+  </div>
+
+  <div id="wrap">
+    <canvas id="game" width="960" height="540" aria-label="Vespa Jump game"></canvas>
+  </div>
 </div>
-<canvas id="gameCanvas"></canvas>
-<div id="scoreboard">
-  <h2>Game Over</h2>
-  <p>Your Score: <span id="finalScore"></span></p>
-  <input type="text" id="playerName" placeholder="Enter your name">
-  <button id="submitScore">Submit Score</button>
-  <button id="restartBtn">Restart</button>
+
+<!-- Start -->
+<div id="startScreen" class="overlay">
+  <div class="card">
+    <h1 style="margin:0 0 8px">🛵 Vespa Jump</h1>
+    <div>Tap, press <kbd>Space</kbd> or <kbd>↑</kbd> to jump (double‑jump allowed).<br/>After a crash, press <kbd>R</kbd> or tap <em>Restart</em>.</div>
+    <a href="#" id="startBtn" class="btn">Start</a>
+  </div>
 </div>
+
+<!-- Game Over -->
+<div id="gameOver" class="overlay" style="display:none">
+  <div class="card">
+    <h2 style="margin:0 8px 8px">Game Over</h2>
+    <div style="margin-bottom:8px">Score: <span id="finalScore">0</span> · Best: <span id="finalBest">0</span></div>
+
+    <div id="qualifyBox" style="display:none">
+      <div class="field">
+        <input id="initials" class="initials" maxlength="3" placeholder="AAA" autocomplete="off" spellcheck="false">
+      </div>
+      <div class="hint">Enter 3 letters/numbers · Only A–Z / 0–9</div>
+      <div class="row">
+        <a href="#" id="saveScoreBtn" class="btn">Save</a>
+        <a href="#" id="skipBtn" class="btn" style="background:#666">Skip</a>
+      </div>
+    </div>
+
+    <!-- Compact Top 10 inside GO card on mobile -->
+    <div id="lbGO" style="display:none; margin-top:14px; text-align:left">
+      <div style="font-weight:800;margin-bottom:6px">🏁 Top 10</div>
+      <ol id="lb2" style="margin:0;padding-left:18px;display:grid;gap:2px;max-height:38vh;overflow:auto"></ol>
+    </div>
+
+    <div class="row" id="restartRow">
+      <a href="#" id="restartBtn" class="btn">Restart (R)</a>
+    </div>
+  </div>
+</div>
+
 <script>
-const canvas = document.getElementById('gameCanvas');
-const ctx = canvas.getContext('2d');
-
-let W = 960, H = 540;
-let floorY = H * 0.78;
-
-function updateGeometry(cssW, cssH) {
-  W = Math.max(1, Math.round(cssW));
-  H = Math.max(1, Math.round(cssH));
-  floorY = H * 0.78;
-  if (player) {
-    if (player.y > floorY) player.y = floorY;
-  }
-}
-
-function resizeCanvas(){
-  const rect = canvas.getBoundingClientRect();
-  const cssW = Math.max(1, Math.floor(rect.width || window.innerWidth));
-  const cssH = Math.max(1, Math.floor(rect.height || window.innerHeight));
-  const DPR = Math.max(1, Math.floor(window.devicePixelRatio || 1));
-  canvas.width  = cssW * DPR;
-  canvas.height = cssH * DPR;
-  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-  ctx.imageSmoothingEnabled = true;
-  updateGeometry(cssW, cssH);
-}
-
-function setAppVh() {
+/* ===================== Mobile real viewport height ===================== */
+function setAppVh(){
   const vh = (window.visualViewport ? window.visualViewport.height : window.innerHeight);
   document.documentElement.style.setProperty('--app-vh', vh + 'px');
 }
 setAppVh();
-window.addEventListener('resize', setAppVh);
+addEventListener('resize', setAppVh);
+addEventListener('orientationchange', setAppVh);
 if (window.visualViewport) window.visualViewport.addEventListener('resize', setAppVh);
 
-window.addEventListener('resize', resizeCanvas);
+/* ===================== Same-origin API helpers ===================== */
+async function apiGetTop10(){
+  try{
+    const r = await fetch('/api/leaderboard', { cache: 'no-store' });
+    if(!r.ok) return [];
+    return await r.json();
+  }catch{ return []; }
+}
+async function apiSaveScore(name, score){
+  const r = await fetch('/api/leaderboard', {
+    method:'POST',
+    headers:{ 'Content-Type':'application/json' },
+    body: JSON.stringify({ name, score })
+  });
+  const text = await r.text(); let data=null; try{ data = text?JSON.parse(text):null; }catch{}
+  if(!r.ok) throw new Error(data?.error || text || 'save failed');
+  return data;
+}
+
+/* ===================== Canvas & sizing ===================== */
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d', { alpha:true });
+
+let W = 960, H = 540;
+let floorY = H * 0.78;
+
+function updateGeometry(cssW, cssH){
+  W = Math.max(1, Math.round(cssW));
+  H = Math.max(1, Math.round(cssH));
+  floorY = H * 0.78;
+  if (player && player.y > floorY) player.y = floorY;
+}
+function resizeCanvas(){
+  const rect = canvas.getBoundingClientRect();
+  const cssW = Math.max(1, Math.floor(rect.width || 960));
+  const cssH = Math.max(1, Math.floor(rect.height || 540));
+  const DPR  = Math.max(1, Math.floor(window.devicePixelRatio || 1));
+  canvas.width  = cssW * DPR;
+  canvas.height = cssH * DPR;
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  ctx.imageSmoothingEnabled = true;
+  updateGeometry(cssW, cssH);
+}
+resizeCanvas();
+addEventListener('resize', resizeCanvas);
 if (window.visualViewport) window.visualViewport.addEventListener('resize', resizeCanvas);
 
-// Game variables
-let player = { x: 100, y: floorY, vy: 0, size: 40, onGround: true };
-let obstacles = [];
-let score = 0;
-let gameOver = false;
-let speed = 6;
-let obstacleSpacing = 2000; // ms between spawns
-let lastSpawn = 0;
+/* ===================== UI refs ===================== */
+const startScreen = document.getElementById('startScreen');
+const gameOverEl  = document.getElementById('gameOver');
+const startBtn    = document.getElementById('startBtn');
+const restartBtn  = document.getElementById('restartBtn');
+const finalScore  = document.getElementById('finalScore');
+const finalBest   = document.getElementById('finalBest');
+const qualifyBox  = document.getElementById('qualifyBox');
+const initialsEl  = document.getElementById('initials');
+const saveScoreBtn= document.getElementById('saveScoreBtn');
+const skipBtn     = document.getElementById('skipBtn');
+const lbEl        = document.getElementById('lb');
+const lbSub       = document.getElementById('lbSub');
+const lbGO        = document.getElementById('lbGO');
+const lb2El       = document.getElementById('lb2');
 
-function jump(){
-  if (player.onGround) {
-    player.vy = -12;
-    player.onGround = false;
-  }
+/* ===================== Sprite ===================== */
+const vespaImg = new Image();
+vespaImg.src = 'Blue Vespa Right.png';
+let vespaReady = false; vespaImg.onload = ()=> vespaReady = true;
+
+/* ===================== Physics / tuning ===================== */
+const gravity = 0.9;
+const JUMP_VEL_1 = -14.5, JUMP_VEL_2 = -12.2;
+const COYOTE_FRAMES = 8, BUFFER_FRAMES = 10;
+
+/* Difficulty by speed only; generous spacing */
+const world = {
+  t: 0,
+  speed: 8,
+  baseSpeed: 8,
+  maxSpeed: 20,
+  score: 0,
+  best: Number(localStorage.getItem('vespa_best') || 0),
+  alive: false,
+
+  gapMin: 520,
+  gapMax: 760,
+  spawnDist: 520,
+
+  rampK: 0.020
+};
+function effectiveSpeed(){
+  return Math.min(world.maxSpeed, world.baseSpeed + world.score * world.rampK);
 }
 
-document.addEventListener('keydown', e => {
-  if (e.code === 'Space') jump();
+/* ===================== Player & obstacles ===================== */
+const PLAYER_W = 120, PLAYER_H = 80;
+const player = { x: 0.18*W, y: floorY, vy:0, w:PLAYER_W, h:PLAYER_H, onGround:true,
+                 jumps:0, coyote:0, jumpBuffer:0, usedDouble:false };
+
+const TRI_COLORS = ['#ff6b6b','#ffd166','#06d6a0','#118ab2','#8338ec','#ef476f','#f9c74f','#90be6d'];
+const obstacles = [];
+function randInt(a,b){ return (a + Math.random()*(b-a))|0; }
+function spawnTriangleAt(x){
+  const base  = 38 + Math.random()*48;
+  const high  = 44 + Math.random()*90;
+  const color = TRI_COLORS[(Math.random()*TRI_COLORS.length)|0];
+  obstacles.push({ x, y: floorY, base, height: high, color });
+}
+function planNextSpawn(){ world.spawnDist = randInt(world.gapMin, world.gapMax); }
+
+/* ===================== Leaderboard ===================== */
+async function renderLB(target = lbEl){
+  const lb = (await apiGetTop10()) || [];
+  target.innerHTML = '';
+  lb.forEach((e,i)=>{
+    const li = document.createElement('li');
+    const name = (e.name||'---').toUpperCase().slice(0,3);
+    li.innerHTML = `<span>${i+1}.) ${name}</span><span>${e.score}</span>`;
+    target.appendChild(li);
+  });
+  if(target===lbEl) lbSub.textContent = lb.length ? 'Global leaderboard' : 'No scores yet — be the first!';
+}
+renderLB();
+
+/* ===================== State helpers ===================== */
+function hardResetInput(){ keys.up=false; keys.space=false; player.jumpBuffer=0; }
+function resetGame(){
+  world.t=0; world.score=0;
+  world.speed = world.baseSpeed;
+  world.gapMin = 520; world.gapMax = 760; world.spawnDist = 520;
+  player.y=floorY; player.vy=0; player.onGround=true;
+  player.jumps=0; player.usedDouble=false; player.coyote=0; player.jumpBuffer=0;
+  obstacles.length=0; hardResetInput();
+}
+function startGame(){
+  resetGame(); world.alive = true;
+  startScreen.style.display='none'; gameOverEl.style.display='none';
+  lbGO.style.display='none';
+}
+let awaitingInitials=false;
+
+function gameOver(){
+  world.alive=false;
+  finalScore.textContent = Math.floor(world.score);
+  if(world.score>world.best){ world.best=Math.floor(world.score); localStorage.setItem('vespa_best', world.best); }
+  finalBest.textContent = world.best;
+
+  (async()=>{
+    const lb = (await apiGetTop10()) || [];
+    const minToBeat = lb.length<10 ? 0 : (lb[9]?.score||0);
+    const qualifies = Math.floor(world.score)>minToBeat || lb.length<10;
+    qualifyBox.style.display = qualifies ? 'block' : 'none';
+    awaitingInitials = qualifies;
+    initialsEl.value='';
+
+    const isMobile = matchMedia('(max-width:768px)').matches;
+    if(isMobile){ lbGO.style.display='block'; await renderLB(lb2El); } else { lbGO.style.display='none'; await renderLB(lbEl); }
+
+    gameOverEl.style.display='flex';
+    if(qualifies) setTimeout(()=>initialsEl.focus(),80);
+  })();
+
+  hardResetInput();
+}
+
+/* ===================== Input ===================== */
+const keys = { up:false, space:false };
+const KEY  = { UP:38, SPACE:32, R:82 };
+
+function keyHandler(e,down){
+  if(e.keyCode===KEY.SPACE || e.keyCode===KEY.UP){
+    if(down) e.preventDefault();
+    if(e.keyCode===KEY.SPACE) keys.space=down; else keys.up=down;
+    if(down && !world.alive && !awaitingInitials){ startGame(); return; }
+    if(down && world.alive){ player.jumpBuffer = BUFFER_FRAMES; }
+  } else if(e.keyCode===KEY.R && down){
+    doRestartFlow();
+  }
+}
+addEventListener('keydown', e=>keyHandler(e,true));
+addEventListener('keyup',   e=>keyHandler(e,false));
+startBtn.addEventListener('click', e=>{ e.preventDefault(); startGame(); });
+
+/* Tap/Touch on canvas only (don’t steal overlay taps) */
+const tapSurface = canvas;
+function handleTap(){ if(!world.alive && !awaitingInitials){ startGame(); return; } if(world.alive){ player.jumpBuffer = BUFFER_FRAMES; } }
+function onCanvasPointerDown(e){
+  if(e.pointerType==='mouse') return;
+  if(gameOverEl.style.display==='flex') return;
+  if(startScreen.style.display!=='none'){ e.preventDefault(); handleTap(); return; }
+  if(awaitingInitials) return;
+  e.preventDefault(); handleTap();
+}
+function onCanvasTouchStart(e){
+  if(gameOverEl.style.display==='flex' || awaitingInitials) return;
+  if(e.touches && e.touches.length===1){ e.preventDefault(); handleTap(); }
+}
+tapSurface.addEventListener('pointerdown', onCanvasPointerDown, { passive:false });
+tapSurface.addEventListener('touchstart',  onCanvasTouchStart,  { passive:false });
+[initialsEl, saveScoreBtn, skipBtn, restartBtn, startBtn].forEach(el=>{
+  if(!el) return;
+  el.addEventListener('pointerdown', e=>e.stopPropagation(), { passive:true });
+  el.addEventListener('touchstart',  e=>e.stopPropagation(), { passive:true });
 });
-document.addEventListener('touchstart', e => {
-  e.preventDefault();
-  if (gameOver) return;
-  jump();
-}, { passive: false });
 
-document.getElementById('restartBtn').addEventListener('click', restartGame);
-document.getElementById('submitScore').addEventListener('click', submitScore);
-
-function submitScore(){
-  const name = document.getElementById('playerName').value.trim();
-  if (!name) return;
-  fetch('https://scooter-game-api.vercel.app/api/leaderboard', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name, score })
-  }).then(() => restartGame());
+/* ===================== Save/Skip/Restart ===================== */
+function sanitizeInitials(s){ return (s||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,3); }
+initialsEl.addEventListener('input', ()=>{ const clean=sanitizeInitials(initialsEl.value); if(initialsEl.value!==clean) initialsEl.value=clean; });
+function setSaving(b){ saveScoreBtn.textContent=b?'Saving…':'Save'; saveScoreBtn.style.opacity=b?'.7':'1'; saveScoreBtn.style.pointerEvents=b?'none':'auto'; }
+async function trySaveIfNeeded(){
+  const name=sanitizeInitials(initialsEl.value);
+  if(!awaitingInitials || name.length<1) return true;
+  try{ setSaving(true); await apiSaveScore(name, Math.floor(world.score)); await renderLB(lbEl); return true; }
+  catch(err){ alert('Save failed: '+(err.message||err)); return false; }
+  finally{ setSaving(false); }
 }
+async function doRestartFlow(){ await trySaveIfNeeded(); awaitingInitials=false; startGame(); }
+saveScoreBtn.addEventListener('click', async e=>{ e.preventDefault(); await doRestartFlow(); });
+skipBtn     .addEventListener('click', async e=>{ e.preventDefault(); awaitingInitials=false; startGame(); });
+restartBtn  .addEventListener('click', async e=>{ e.preventDefault(); await doRestartFlow(); });
 
-function restartGame(){
-  player = { x: 100, y: floorY, vy: 0, size: 40, onGround: true };
-  obstacles = [];
-  score = 0;
-  speed = 6;
-  lastSpawn = 0;
-  gameOver = false;
-  document.getElementById('scoreboard').style.display = 'none';
-}
-
-function spawnObstacle(){
-  const size = 40;
-  obstacles.push({ x: W, y: floorY, size });
-}
-
-function update(delta){
-  if (gameOver) return;
-
-  // Gravity
-  player.vy += 0.6;
-  player.y += player.vy;
-  if (player.y >= floorY) {
-    player.y = floorY;
-    player.vy = 0;
-    player.onGround = true;
+/* ===================== Gameplay ===================== */
+function handlePlayerControls(){
+  if(player.onGround) player.coyote = COYOTE_FRAMES; else if(player.coyote>0) player.coyote--;
+  if(player.jumpBuffer>0) player.jumpBuffer--;
+  if(player.jumpBuffer>0 && (player.onGround || player.coyote>0)){
+    player.vy=JUMP_VEL_1; player.onGround=false; player.jumps=1; player.usedDouble=false; player.jumpBuffer=0;
+  } else if(player.jumpBuffer>0 && !player.onGround && !player.usedDouble){
+    player.vy=JUMP_VEL_2; player.usedDouble=true; player.jumps=2; player.jumpBuffer=0;
   }
+}
+function update(){
+  world.t++;
+  if(world.alive){
+    // Difficulty by speed only
+    world.speed = effectiveSpeed();
 
-  // Spawn obstacles
-  if (Date.now() - lastSpawn > obstacleSpacing) {
-    spawnObstacle();
-    lastSpawn = Date.now();
-  }
+    handlePlayerControls();
 
-  // Move obstacles
-  for (let obs of obstacles) {
-    obs.x -= speed;
-    if (obs.x + obs.size < 0) {
-      obstacles.shift();
-      score++;
-      if (score % 5 === 0) speed += 0.5;
+    // Physics
+    player.vy += gravity; player.y += player.vy;
+    if(player.y >= floorY){ player.y=floorY; player.vy=0; if(!player.onGround){ player.onGround=true; player.usedDouble=false; player.jumps=0; } }
+    else { player.onGround=false; }
+
+    // Move obstacles
+    for(let i=obstacles.length-1;i>=0;i--){
+      const o=obstacles[i]; o.x -= world.speed;
+      if(o.x + o.base < -120) obstacles.splice(i,1);
     }
-    // Collision
-    if (player.x < obs.x + obs.size &&
-        player.x + player.size > obs.x &&
-        player.y < obs.y &&
-        player.y + player.size > obs.y - obs.size) {
-      gameOver = true;
-      document.getElementById('finalScore').textContent = score;
-      document.getElementById('scoreboard').style.display = 'block';
+
+    // Spawning — single triangle per spawn (no back-to-back)
+    world.spawnDist -= world.speed;
+    if(world.spawnDist <= 0){ spawnTriangleAt(W + 40); planNextSpawn(); }
+
+    // Scoring
+    world.score += 0.24 + world.speed*0.013;
+
+    // Collision (AABB vs triangle bbox)
+    const pb = getPlayerBounds();
+    for(const o of obstacles){
+      const ob = { x:o.x, y:o.y - o.height, w:o.base, h:o.height };
+      if(rectsOverlap(pb, ob)){ gameOver(); break; }
     }
   }
-}
-
-function draw(){
-  ctx.clearRect(0, 0, W, H);
-  ctx.fillStyle = 'lightblue';
-  ctx.fillRect(0, 0, W, H);
-
-  ctx.fillStyle = 'green';
-  ctx.fillRect(0, floorY + player.size, W, H - floorY);
-
-  ctx.fillStyle = 'red';
-  ctx.fillRect(player.x, player.y - player.size, player.size, player.size);
-
-  ctx.fillStyle = 'black';
-  for (let obs of obstacles) {
-    ctx.beginPath();
-    ctx.moveTo(obs.x, obs.y);
-    ctx.lineTo(obs.x + obs.size, obs.y);
-    ctx.lineTo(obs.x + obs.size/2, obs.y - obs.size);
-    ctx.closePath();
-    ctx.fill();
-  }
-
-  document.getElementById('score').textContent = 'Score: ' + score;
-}
-
-let lastTime = 0;
-function loop(timestamp){
-  const delta = timestamp - lastTime;
-  lastTime = timestamp;
-  update(delta);
   draw();
-  requestAnimationFrame(loop);
+  requestAnimationFrame(update);
 }
 
-resizeCanvas();
-loop();
+/* ===================== Drawing ===================== */
+function getPlayerBounds(){ return { x: player.x - player.w*0.45, y: player.y - player.h, w: player.w*0.9, h: player.h*0.95 }; }
+function rectsOverlap(a,b){ return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y; }
+
+function drawRoad(){
+  ctx.fillStyle = '#2a2a2a'; ctx.fillRect(0, floorY, W, H-floorY);
+  ctx.fillStyle = 'rgba(255,255,255,.25)';
+  const stripeW=120, stripeH=6, phase=(world.t*world.speed*0.5)%(stripeW*2);
+  for(let x=-phase; x<W; x+=stripeW*2){
+    const xx1=Math.round(x), xx2=Math.round(x+60);
+    ctx.fillRect(xx1, floorY+30, stripeW, stripeH);
+    ctx.fillRect(xx2, floorY+60, stripeW, stripeH);
+  }
+}
+function drawTriangles(){
+  for(const o of obstacles){
+    ctx.fillStyle=o.color; ctx.beginPath();
+    const x0=Math.round(o.x), y0=Math.round(o.y);
+    const x1=Math.round(o.x+o.base/2), y1=Math.round(o.y-o.height);
+    const x2=Math.round(o.x+o.base);
+    ctx.moveTo(x0,y0); ctx.lineTo(x1,y1); ctx.lineTo(x2,y0); ctx.closePath(); ctx.fill();
+  }
+}
+function drawVespa(){
+  if(vespaReady){
+    ctx.drawImage(vespaImg, Math.round(player.x - player.w/2), Math.round(player.y - player.h), player.w, player.h);
+  }else{
+    ctx.fillStyle='#1e8bff'; ctx.fillRect(Math.round(player.x - player.w/2), Math.round(player.y - player.h), player.w, player.h);
+  }
+  ctx.fillStyle='rgba(0,0,0,.16)'; ctx.beginPath(); ctx.ellipse(player.x, player.y-2, player.w*0.44, 8, 0, 0, Math.PI*2); ctx.fill();
+}
+function draw(){ ctx.clearRect(0,0,W,H); drawRoad(); drawTriangles(); drawVespa(); }
+
+/* ===================== Kickoff ===================== */
+update();  // start the loop
 </script>
 </body>
 </html>
