@@ -6,24 +6,16 @@
 <title>Blue Vespa Scooter Game</title>
 <style>
   :root{ --app-vh:100vh; --header-h:110px; }
-
   html,body{margin:0;padding:0}
   body{
     background:#cfe9ff;color:#111;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
     overflow:hidden;display:flex;flex-direction:column;align-items:center;
     padding-bottom:env(safe-area-inset-bottom);-webkit-user-select:none;user-select:none;
   }
-
-  /* Top 10 (visible Start/Game Over; hidden during play) */
-  #leaderboard{
-    width:100%;max-width:720px;padding:8px 12px 6px;background:#212529;color:#fff;
-    border-bottom:2px solid rgba(255,255,255,.08);box-sizing:border-box;
-  }
+  #leaderboard{width:100%;max-width:720px;padding:8px 12px 6px;background:#212529;color:#fff;border-bottom:2px solid rgba(255,255,255,.08);box-sizing:border-box}
   #leaderboard.hidden{display:none}
   #leaderboard h3{margin:6px 0 8px;text-align:center;letter-spacing:.5px}
   #leaderboard ol{margin:0 auto 6px;padding-left:24px;max-width:680px;line-height:1.35}
-
-  /* Game area */
   #wrap{position:relative;width:100%;max-width:720px}
   canvas{
     display:block;width:100%;
@@ -32,8 +24,6 @@
     min-height:420px;max-height:calc(100vh - env(safe-area-inset-bottom));
     border:2px solid #000;border-radius:12px;box-sizing:border-box;touch-action:manipulation;
   }
-
-  /* Overlays */
   .overlay{
     position:absolute;inset:0;z-index:10;display:flex;flex-direction:column;align-items:center;justify-content:center;
     background:rgba(255,255,255,.88);color:#111;text-align:center;padding:18px
@@ -81,7 +71,7 @@
   </div>
 
 <script>
-/* ===== viewport height fix (iOS/Firefox toolbars) ===== */
+/* ===== viewport height fix ===== */
 function setAppVh(){
   const vv=window.visualViewport;
   const h=vv&&vv.height ? vv.height : (window.innerHeight||document.documentElement.clientHeight||0);
@@ -99,7 +89,7 @@ const ctx=canvas.getContext('2d');
 /* player BEFORE sizing so we can clamp safely */
 let player={ x:90, y:0, w:120, h:80, dy:0, onGround:false, jumps:0 };
 
-let W=960, H=540, floorY=Math.round(H*0.70);  /* raised road -> action sits higher */
+let W=960, H=540, floorY=Math.round(H*0.70);  /* raised road */
 function fitCanvasDPR(){
   const rect=canvas.getBoundingClientRect();
   const DPR=Math.max(1,window.devicePixelRatio||1);
@@ -125,33 +115,39 @@ vespaImg.onerror=()=>console.warn('Vespa PNG not found. Check file name/path.');
 /* ===== world & tuning (time‑based) ===== */
 let running=false, score=0;
 let scoreTime=0, scoreBonus=0;   // live score parts
-let elapsed=0;                   // seconds since run start
+let elapsed=0;
 let last=performance.now();
 
 let obstacles=[];
 
 /* speed in px/second (consistent across FPS) */
-const SPEED_BASE_PPS = 300;    // slower, friendlier start
-const SPEED_MAX_PPS  = 3000;    // lower top speed
-const ACCEL_PPS2     = 20;      // gentler acceleration (px/s^2)
-const WARMUP_SEC     = .5;    // hold base speed for first ~1.8s
+const SPEED_BASE_PPS = 150;    // calm start
+const SPEED_MAX_PPS  = 800;    // reasonable cap
+const ACCEL_PPS2     = 6;      // gentle
+const WARMUP_SEC     = 1.8;    // fixed slow opening
 let  speedPPS        = SPEED_BASE_PPS;
 
-const world={
-  pTallBase:0.25, pTallLate:0.45, tallStreak:0, singleStreak:0, maxTallStreak:1, maxSingleStreak:4,
-  warmupScore:150,
-  rtSingle:0.90, rtTall:1.05, rtJitter:0.10
+/* jump physics: floatier; bigger double */
+const GRAVITY_ASC  = 0.38;
+const GRAVITY_DESC = 0.52;
+const JUMP_VEL_1   = 12.2;
+const JUMP_VEL_2   = 12.8;
+
+/* obstacle bands + types */
+const BANDS = ['small','medium','tall'];
+const BAND_WEIGHTS_EARLY = {small:0.5, medium:0.32, tall:0.18};
+const BAND_WEIGHTS_LATE  = {small:0.4, medium:0.35, tall:0.25};
+let lastBand=null, sameBandStreak=0, MAX_SAME_BAND=2;
+
+const COLORS = {
+  triangleTall:'#ef476f', triangleMid:'#ffd166', triangleSmall:'#06d6a0',
+  tree:'#2e7d32', trunk:'#6d4c41',
+  dog:'#8d6e63', chick:'#ffeb3b', chickBeak:'#ff9800'
 };
 
 let distSinceSpawn=0, nextGapPx=620;  // wider first gap
 
-/* jump physics: floatier; double‑jump bigger & slower */
-const GRAVITY_ASC  = 0.55;
-const GRAVITY_DESC = 0.65;
-const JUMP_VEL_1   = 12.2;
-const JUMP_VEL_2   = 12.9;
-
-/* ===== draw helpers ===== */
+/* ===== helpers ===== */
 function drawRoad(){
   const roadTop=floorY+2;
   ctx.fillStyle='#2a2a2a'; ctx.fillRect(0,roadTop,W,H-roadTop);
@@ -164,49 +160,13 @@ function drawVespa(){
   else { ctx.fillStyle='#1e8bff'; ctx.fillRect(player.x, player.y, player.w, player.h); }
 }
 
-/* ===== obstacles ===== */
-function decideTall(s){
-  const t=Math.min(1, Math.max(0, (s - world.warmupScore)/1500));
-  let p=world.pTallBase*(1-t) + world.pTallLate*t;
-  if(s<800) p*=0.55;                       // more singles early
-  if(world.tallStreak>0) p*=0.5;
-  if(world.tallStreak>=world.maxTallStreak) return false;
-  if(world.singleStreak>=world.maxSingleStreak) return true;
-  return Math.random()<p;
-}
-function randMid(){
-  // average of 2 uniforms → triangular distribution
-  return (Math.random() + Math.random()) / 2;
-}
-// then use randMid() instead of Math.random()
-function triangleSpec(tall){
-  const ramp=Math.min(1, Math.max(0, score/1200));
-  const smallMin=35, smallMax=45;
-  const tallMin=42+(50-42)*ramp, tallMax=350+(74-350)*ramp;
-  const h=tall ? (tallMin + randMid() * (tallMax - tallMin)) : (smallMin + randMid() * (smallMax - smallMin));
-  const base=h*0.6+Math.random()*8;
-  return {base, height:h};
-}
-function planNextGapPx(vPPS, tall){
-  const pxps=Math.max(1, vPPS);
-  const rtBase=tall?world.rtTall:world.rtSingle;
-  const rt=Math.max(0.65, rtBase+((Math.random()*2-1)*world.rtJitter));
-  const margin=140 + (vPPS/10) + (tall?64:16);   // wider as speed rises
-  return Math.max(280, Math.round(pxps*rt + margin));
-}
-function spawnObstacle(tall){
-  const spec=triangleSpec(tall);
-  obstacles.push({ x:W+24, y:floorY, base:spec.base, height:spec.height, color:tall?'#ef476f':'#06d6a0', tall });
-  if(tall){ world.tallStreak++; world.singleStreak=0; } else { world.singleStreak++; world.tallStreak=0; }
-  nextGapPx=planNextGapPx(speedPPS, decideTall(score));
-  distSinceSpawn=0;
-}
-
-/* ===== hitbox & triangle collision (forgiving) ===== */
+/* friendly player hitbox */
 function getPlayerHitbox(){
-  const padX=player.w*0.18, padY=player.h*0.24;
+  const padX=player.w*0.22, padY=player.h*0.28;
   return { x:player.x+padX, y:player.y+padY, w:player.w-padX*2, h:player.h-padY*2 };
 }
+
+/* triangle math */
 function pointInTri(px,py,ax,ay,bx,by,cx,cy){
   const v0x=cx-ax,v0y=cy-ay, v1x=bx-ax,v1y=by-ay, v2x=px-ax,v2y=py-ay;
   const dot00=v0x*v0x+v0y*v0y, dot01=v0x*v1x+v0y*v1y, dot02=v0x*v2x+v0y*v2y;
@@ -218,7 +178,7 @@ function pointInTri(px,py,ax,ay,bx,by,cx,cy){
 function hitsTriangle(hit, tri){
   const ax=tri.x, bx=tri.x+tri.base, cx=tri.x+tri.base/2;
   const ay=tri.y, by=tri.y,            cy=tri.y-tri.height;
-  const pad=5;
+  const pad=6;
   if(hit.x+hit.w<=ax+pad) return false;
   if(hit.x>=bx-pad) return false;
   if(hit.y+hit.h<=cy+pad) return false;
@@ -228,22 +188,203 @@ function hitsTriangle(hit, tri){
   return pointInTri(blx,bly,ax,ay,bx,by,cx,cy) || pointInTri(brx,bry,ax,ay,bx,by,cx,cy);
 }
 
+/* simple AABB overlap */
+function aabbOverlap(a,b){
+  return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+}
+
+/* bias to middle heights (Flappy‑Bird‑ish rhythm) */
+function randMid(){ return (Math.random()+Math.random())/2; }
+
+/* band picker with anti‑streak + late game shift */
+function pickBand(){
+  const t = Math.min(1, score/1200);
+  const w = {
+    small: BAND_WEIGHTS_EARLY.small*(1-t) + BAND_WEIGHTS_LATE.small*t,
+    medium:BAND_WEIGHTS_EARLY.medium*(1-t)+ BAND_WEIGHTS_LATE.medium*t,
+    tall:  BAND_WEIGHTS_EARLY.tall*(1-t)  + BAND_WEIGHTS_LATE.tall*t
+  };
+  if(lastBand && sameBandStreak>=MAX_SAME_BAND){
+    // force a different band
+    const others=BANDS.filter(b=>b!==lastBand);
+    return others[Math.floor(Math.random()*others.length)];
+  }
+  const r=Math.random()*(w.small+w.medium+w.tall);
+  const pick = r<w.small ? 'small' : (r<(w.small+w.medium)?'medium':'tall');
+  if(pick===lastBand) sameBandStreak++; else { lastBand=pick; sameBandStreak=1; }
+  return pick;
+}
+
+/* obstacle spec per band & type */
+function triangleSpecByBand(band){
+  const ramp=Math.min(1, Math.max(0, score/1200));
+  let hMin,hMax;
+  if(band==='small'){ hMin=26; hMax=40; }
+  else if(band==='medium'){ hMin=44; hMax=56; }
+  else { // tall
+    const tMinS=48, tMinE=58, tMaxS=66, tMaxE=88;
+    hMin=tMinS*(1-ramp)+tMinE*ramp;
+    hMax=tMaxS*(1-ramp)+tMaxE*ramp;
+  }
+  // cap for tiny screens
+  const cap=Math.max(60, H*0.55);
+  hMax=Math.min(hMax, cap);
+  const h = hMin + randMid()*(hMax-hMin);
+  const base = h * (0.85 + Math.random()*0.10);
+  return {base, height:h};
+}
+function rectSpecByBand(band){ // for dog/chick/tree crown size proxy
+  let wMin,wMax,hMin,hMax;
+  if(band==='small'){ wMin=26; wMax=40; hMin=26; hMax=38; }
+  else if(band==='medium'){ wMin=42; wMax=56; hMin=34; hMax=52; }
+  else { wMin=56; wMax=78; hMin=46; hMax=68; }
+  const w = wMin + randMid()*(wMax-wMin);
+  const h = hMin + randMid()*(hMax-hMin);
+  return {w,h};
+}
+
+/* object picker */
+const OBSTACLE_TYPES = ['triangle','tree','dog','chick']; // add more later
+function pickObstacleType(){
+  // triangles slightly more common early; variety grows
+  const t=Math.min(1, score/1500);
+  const weights = {
+    triangle: 0.50*(1-t) + 0.35*t,
+    tree:     0.25*(1-t) + 0.28*t,
+    dog:      0.15*(1-t) + 0.20*t,
+    chick:    0.10*(1-t) + 0.17*t
+  };
+  const r=Math.random()*(weights.triangle+weights.tree+weights.dog+weights.chick);
+  if(r<weights.triangle) return 'triangle';
+  if(r<weights.triangle+weights.tree) return 'tree';
+  if(r<weights.triangle+weights.tree+weights.dog) return 'dog';
+  return 'chick';
+}
+
+/* planning spawn spacing (wider with speed & band) */
+function planNextGapPx(vPPS, band){
+  const pxps=Math.max(1, vPPS);
+  const bandFactor = band==='tall' ? 1.15 : band==='medium' ? 1.05 : 1.0;
+  const baseRT = band==='tall' ? 1.05 : band==='medium' ? 0.98 : 0.90;
+  const rt = Math.max(0.7, baseRT + ((Math.random()*2-1)*0.10));
+  const margin = (140 + (vPPS/10)) * bandFactor + (band==='tall'?70:(band==='medium'?36:16));
+  return Math.max(280, Math.round(pxps*rt + margin));
+}
+
+/* spawn */
+function spawnObstacle(){
+  const band = pickBand();
+  const kind = pickObstacleType();
+
+  if(kind==='triangle'){
+    const spec=triangleSpecByBand(band);
+    const color = band==='tall'?COLORS.triangleTall : band==='medium'?COLORS.triangleMid : COLORS.triangleSmall;
+    obstacles.push({ kind, band, x:W+24, y:floorY, base:spec.base, height:spec.height, color });
+  } else if(kind==='tree'){
+    const sz=rectSpecByBand(band);
+    const trunkW=Math.max(10, sz.w*0.25), trunkH=Math.max(18, sz.h*0.55);
+    const crownR=Math.max(16, Math.max(sz.w,sz.h)*0.7);
+    obstacles.push({ kind, band, x:W+24, y:floorY, w:sz.w, h:sz.h, trunkW, trunkH, crownR });
+  } else if(kind==='dog'){
+    const sz=rectSpecByBand(band);
+    obstacles.push({ kind, band, x:W+24, y:floorY, w:sz.w*1.1, h:sz.h*0.8 });
+  } else { // chick
+    const sz=rectSpecByBand(band);
+    const r=Math.max(14, (sz.w+sz.h)/4);
+    obstacles.push({ kind, band, x:W+24, y:floorY, r, w:r*1.8, h:r*1.6 });
+  }
+
+  nextGapPx = planNextGapPx(speedPPS, band);
+  distSinceSpawn=0;
+}
+
+/* drawing & collision per kind */
+function drawAndCollideObstacle(o, hit){
+  if(o.kind==='triangle'){
+    ctx.fillStyle=o.color; ctx.beginPath();
+    ctx.moveTo(o.x,o.y);
+    ctx.lineTo(o.x+o.base/2,o.y-o.height);
+    ctx.lineTo(o.x+o.base,o.y);
+    ctx.closePath(); ctx.fill();
+
+    if(hitsTriangle(hit, o)) return true;
+
+  } else if(o.kind==='tree'){
+    // trunk
+    const trunkH=o.trunkH, trunkW=o.trunkW;
+    ctx.fillStyle=COLORS.trunk;
+    ctx.fillRect(o.x + (o.w-trunkW)/2, o.y-trunkH, trunkW, trunkH);
+    // crown
+    ctx.fillStyle=COLORS.tree;
+    ctx.beginPath();
+    ctx.ellipse(o.x+o.w/2, o.y-trunkH - o.crownR*0.6, o.crownR*0.85, o.crownR*0.7, 0, 0, Math.PI*2);
+    ctx.fill();
+    // padded AABB collision
+    const box={x:o.x+6, y:o.y - (trunkH + o.crownR*1.2), w:o.w-12, h:(trunkH + o.crownR*1.2)};
+    if(aabbOverlap(hit, box)) return true;
+
+  } else if(o.kind==='dog'){
+    // body
+    const bodyH=o.h, bodyW=o.w;
+    const ry=8, rx=12;
+    ctx.fillStyle=COLORS.dog;
+    roundRect(ctx, o.x, o.y-bodyH, bodyW, bodyH, rx, ry); ctx.fill();
+    // head
+    roundRect(ctx, o.x+bodyW*0.72, o.y-bodyH*0.9, bodyW*0.38, bodyH*0.55, 10,10); ctx.fill();
+    // collision box (friendly)
+    const box={x:o.x+6, y:o.y-bodyH, w:bodyW-12, h:bodyH};
+    if(aabbOverlap(hit, box)) return true;
+
+  } else { // chick
+    const r=o.r;
+    // body
+    ctx.fillStyle=COLORS.chick;
+    ctx.beginPath(); ctx.ellipse(o.x+o.w/2, o.y - r, r, r*0.9, 0, 0, Math.PI*2); ctx.fill();
+    // beak
+    ctx.fillStyle=COLORS.chickBeak;
+    ctx.beginPath();
+    const cx=o.x+o.w/2, cy=o.y - r*0.9;
+    ctx.moveTo(cx+r*0.2, cy);
+    ctx.lineTo(cx+r*0.45, cy+r*0.12);
+    ctx.lineTo(cx+r*0.45, cy-r*0.12);
+    ctx.closePath(); ctx.fill();
+    // collision (AABB)
+    const box={x:o.x+6, y:o.y - r*1.9, w:o.w-12, h:r*1.9};
+    if(aabbOverlap(hit, box)) return true;
+  }
+  return false;
+}
+
+/* rounded rect helper */
+function roundRect(c, x, y, w, h, rx, ry){
+  c.beginPath();
+  c.moveTo(x+rx,y);
+  c.lineTo(x+w-rx,y);
+  c.quadraticCurveTo(x+w,y,x+w,y+ry);
+  c.lineTo(x+w,y+h-ry);
+  c.quadraticCurveTo(x+w,y+h,x+w-rx,y+h);
+  c.lineTo(x+rx,y+h);
+  c.quadraticCurveTo(x,y+h,x,y+h-ry);
+  c.lineTo(x,y+ry);
+  c.quadraticCurveTo(x,y,x+rx,y);
+  c.closePath();
+}
+
 /* ===== control ===== */
 function resetGame(){
   score=0; scoreTime=0; scoreBonus=0; elapsed=0;
   speedPPS=SPEED_BASE_PPS;
   obstacles.length=0;
-  world.tallStreak=0; world.singleStreak=0;
-  nextGapPx=620; distSinceSpawn=0;     // wider first gap
+  distSinceSpawn=0; nextGapPx=620;
+  lastBand=null; sameBandStreak=0;
+
   player.y=floorY-player.h; player.dy=0; player.onGround=true; player.jumps=0;
   last=performance.now();
 }
 function startGame(){
   document.getElementById('leaderboard').classList.add('hidden');
   document.documentElement.style.setProperty('--header-h','0px');
-
   fitCanvasDPR(); setTimeout(fitCanvasDPR,60); setTimeout(fitCanvasDPR,260);
-
   document.getElementById('startScreen').style.display='none';
   document.getElementById('gameOverScreen').style.display='none';
   resetGame(); running=true; window.__startCalled=true;
@@ -253,7 +394,6 @@ function endGame(){
   running=false;
   document.getElementById('finalScore').textContent=`Score: ${score}`;
   document.getElementById('gameOverScreen').style.display='flex';
-
   document.getElementById('leaderboard').classList.remove('hidden');
   document.documentElement.style.setProperty('--header-h','110px');
   setAppVh(); fitCanvasDPR();
@@ -267,12 +407,11 @@ function frame(){
   const dt=Math.min(0.033, (now-last)/1000); // clamp to 33ms
   last=now;
   elapsed += dt;
-  const dtScale = Math.min(2.0, dt * 60); // scale physics to ~60 FPS; clamp for safety
+  const dtScale = Math.min(2.0, dt * 60); // ~60fps scale for jump physics
 
   // consistent opening: hold base speed for WARMUP_SEC, then ramp
-  if (elapsed < WARMUP_SEC) {
-    speedPPS = SPEED_BASE_PPS;
-  } else {
+  if (elapsed < WARMUP_SEC) { speedPPS = SPEED_BASE_PPS; }
+  else {
     const t = elapsed - WARMUP_SEC;
     speedPPS = Math.min(SPEED_MAX_PPS, SPEED_BASE_PPS + ACCEL_PPS2 * t);
   }
@@ -282,16 +421,16 @@ function frame(){
   drawRoad();
 
   // physics (time-based)
-player.y += player.dy * dtScale;
-player.dy += (player.dy < 0 ? GRAVITY_ASC : GRAVITY_DESC) * dtScale;
+  player.y += player.dy * dtScale;
+  player.dy += (player.dy < 0 ? GRAVITY_ASC : GRAVITY_DESC) * dtScale;
 
-// ground clamp
-if (player.y >= floorY - player.h) {
-  player.y = floorY - player.h; player.dy = 0;
-  if (!player.onGround) { player.onGround = true; player.jumps = 0; }
-} else {
-  player.onGround = false;
-}
+  // ground clamp
+  if (player.y >= floorY - player.h) {
+    player.y = floorY - player.h; player.dy = 0;
+    if (!player.onGround) { player.onGround = true; player.jumps = 0; }
+  } else {
+    player.onGround = false;
+  }
 
   drawVespa();
 
@@ -301,29 +440,24 @@ if (player.y >= floorY - player.h) {
     const o=obstacles[i];
     o.x -= dx;
 
-    ctx.fillStyle=o.color; ctx.beginPath();
-    ctx.moveTo(o.x,o.y);
-    ctx.lineTo(o.x+o.base/2,o.y-o.height);
-    ctx.lineTo(o.x+o.base,o.y);
-    ctx.closePath(); ctx.fill();
+    if(drawAndCollideObstacle(o, hit)){ endGame(); break; }
 
-    if(hitsTriangle(hit,o)){ endGame(); break; }
-
-    if(o.x+o.base<0){
+    if(o.x + (o.base||o.w||o.r*2) < 0){
       obstacles.splice(i,1);
-      scoreBonus += o.tall ? 8 : 5;  // bonus for successful clear
+      // bonus per clear, based on band
+      scoreBonus += (o.band==='tall'?8:(o.band==='medium'?6:5));
     }
   }
 
-  // spawn by actual distance traveled
+  // spawn by distance
   distSinceSpawn += dx;
-  if(distSinceSpawn >= nextGapPx) spawnObstacle(decideTall(score));
+  if(distSinceSpawn >= nextGapPx) spawnObstacle();
 
-  // live score (time + bonuses)
-  scoreTime += dt*10;                   // ~10 pts/sec
+  // live score
+  scoreTime += dt*10;              // ~10 pts/sec
   score = Math.max(0, Math.floor(scoreTime + scoreBonus));
 
-  // HUD (white with stronger outline)
+  // HUD
   ctx.save();
   ctx.fillStyle='#ffffff';
   ctx.font='18px system-ui, sans-serif';
