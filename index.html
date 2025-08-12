@@ -2,551 +2,389 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport"
-      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-<title>Scooter Game</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Blue Vespa Scooter Game</title>
 <style>
   :root { --app-vh: 100vh; }
-
-  body{
-    font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+  body {
     margin: 0;
-    background: #f0f2f5;
-    color: #111;
-    -webkit-tap-highlight-color: transparent;
+    background: #cce7ff;
+    font-family: Arial, sans-serif;
     overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
   }
-
-  #gameContainer{
+  #leaderboard {
+    font-size: 14px;
+    margin: 6px 0 0;
+    width: 100%;
+    max-width: 520px;
+    text-align: center;
+  }
+  #wrap {
     position: relative;
-    margin: 0 auto;
-    display: grid;
-    place-items: center;
-    height: 100vh; /* desktop fallback; mobile uses --app-vh */
+    width: 100%;
+    max-width: 520px;
   }
-
-  canvas{
-    background: #fff;
+  canvas {
+    background: #87CEFA;
+    display: block;
+    width: 100%;
+    height: calc(max(58vh, var(--app-vh, 100vh)) - 120px);
+    min-height: 300px;
     border: 2px solid #000;
     border-radius: 10px;
-    display: block;
-    width: 960px;
-    height: 540px;
-    max-width: 100vw;
-    touch-action: manipulation;
   }
-
-  /* Compact UI bar for Start/Restart */
-  #ui{
-    position: absolute;
-    top: 8px; left: 50%;
-    transform: translateX(-50%);
-    z-index: 5;
-    display: flex; gap: 8px;
-    pointer-events: none;
-  }
-  #ui button{
-    pointer-events: auto;
-    font-weight: 800;
-    border-radius: 10px;
-    padding: 8px 14px;
-    border: 0;
-    background: #111;
+  .overlay {
+    position: absolute; inset: 0;
+    background: rgba(0,0,0,.5);
     color: #fff;
-  }
-
-  /* Game Over overlay with initials + Top 10 */
-  #scoreboard{
-    position: fixed; inset: 0;
-    display: none;
+    display: flex; flex-direction: column;
     align-items: center; justify-content: center;
-    background: rgba(255,255,255,.9);
-    z-index: 10;
-    overflow: auto;
-    padding: 16px 0;
+    z-index: 10; text-align: center; padding: 16px;
   }
-  .card{
-    background: #fff; border-radius: 14px;
-    box-shadow: 0 12px 36px rgba(0,0,0,.2);
-    padding: 20px 24px;
-    width: min(92vw, 520px);
+  button {
+    padding: 10px 16px;
+    font-size: 18px;
+    margin-top: 10px;
+    cursor: pointer;
+    border-radius: 10px;
+    border: 0;
+    background: #111; color: #fff; font-weight: 800;
   }
-  .row{ display:flex; gap:10px; justify-content:center; flex-wrap:wrap; margin-top:10px; }
-  .btn{ background:#111; color:#fff; padding:10px 16px; border-radius:10px; font-weight:800; border:0; }
-  .muted{ opacity:.7; }
-  input.initials{
-    width:160px; text-align:center; font-size:28px; letter-spacing:6px; text-transform:uppercase;
-    border:2px solid #111; border-radius:10px; padding:8px 10px; outline:none;
-  }
-  ol.lb{ margin:8px 0 0 20px; padding:0; }
-  ol.lb li{ display:flex; justify-content:space-between; font-weight:700; }
-
-  /* Mobile: robust height with fallbacks so canvas never collapses */
-  @media (max-width: 768px){
-    #gameContainer{ height: var(--app-vh, 100vh); }
-    canvas{
-      width: 100vw;
-      height: calc( max(60vh, var(--app-vh, 100vh)) - 20px );
-      min-height: 300px;
-      max-height: 100vh;
-      aspect-ratio: auto;
-    }
+  input.initials {
+    text-transform: uppercase; font-size: 18px; width: 70px; text-align: center;
+    border: 2px solid #fff; background: rgba(255,255,255,.15); color: #fff;
+    padding: 6px 8px; border-radius: 8px; outline: none;
   }
 </style>
 </head>
 <body>
-<div id="gameContainer">
-  <canvas id="gameCanvas" width="960" height="540"></canvas>
+  <div id="leaderboard"></div>
 
-  <div id="ui">
-    <button id="startBtn">Start</button>
-    <button id="restartBtn" style="display:none;">Restart</button>
-  </div>
-</div>
+  <div id="wrap">
+    <canvas id="gameCanvas" width="480" height="300"></canvas>
 
-<!-- Game Over + initials + TOP 10 -->
-<div id="scoreboard">
-  <div class="card">
-    <h2 style="margin:0 0 8px">Game Over</h2>
-    <div style="margin-bottom:8px">Score: <b id="finalScore">0</b></div>
-
-    <div id="qualifyBox" style="display:block">
-      <div style="display:flex;justify-content:center;margin:8px 0">
-        <input id="playerName" class="initials" maxlength="3" placeholder="AAA" autocomplete="off" spellcheck="false">
-      </div>
-      <div class="muted" style="text-align:center">Enter 3 letters/numbers · Only A–Z / 0–9</div>
-      <div class="row">
-        <button id="submitScore" class="btn">Save</button>
-        <button id="skipBtn" class="btn" style="background:#666">Skip</button>
-      </div>
+    <div id="startScreen" class="overlay">
+      <h1 style="margin:0 0 6px">Blue Vespa</h1>
+      <div>Tap or press <b>Space</b> to jump (double‑jump allowed)</div>
+      <button id="startButton">Start</button>
     </div>
 
-    <div style="margin-top:14px">
-      <div style="font-weight:800; margin-bottom:6px">🏁 Top 10</div>
-      <ol id="lb" class="lb"></ol>
-      <div id="lbSub" class="muted">Loading…</div>
-    </div>
-
-    <div class="row" style="margin-top:14px">
-      <button id="goRestartBtn" class="btn">Restart (R)</button>
+    <div id="gameOverScreen" class="overlay" style="display:none;">
+      <h1 style="margin:0 0 6px">Game Over</h1>
+      <p id="finalScore" style="margin:0 0 8px"></p>
+      <div style="display:flex; gap:8px; justify-content:center; align-items:center; flex-wrap:wrap;">
+        <input id="playerInitials" class="initials" maxlength="3" placeholder="AAA" autocomplete="off" spellcheck="false" />
+        <button id="saveScoreButton">Save</button>
+        <button id="skipButton" style="background:#666">Skip</button>
+      </div>
+      <button id="restartButton" style="margin-top:14px;">Restart</button>
     </div>
   </div>
-</div>
 
 <script>
-/* ================= Mobile real viewport height (robust) ================= */
-function setAppVhOnce(){
+/* ---------- Mobile real viewport height var (helps Safari) ---------- */
+function setAppVh(){
   const vv = window.visualViewport;
   const h = vv && vv.height ? vv.height : window.innerHeight || document.documentElement.clientHeight || 0;
-  if (h > 0) document.documentElement.style.setProperty('--app-vh', h + 'px');
+  if (h>0) document.documentElement.style.setProperty('--app-vh', h + 'px');
 }
-function pumpVhUpdates(){
-  setAppVhOnce();
-  requestAnimationFrame(setAppVhOnce);
-  setTimeout(setAppVhOnce, 60);
-}
-pumpVhUpdates();
-addEventListener('resize', pumpVhUpdates, { passive:true });
-addEventListener('orientationchange', pumpVhUpdates, { passive:true });
-addEventListener('pageshow', pumpVhUpdates, { passive:true });
-if (window.visualViewport) window.visualViewport.addEventListener('resize', pumpVhUpdates, { passive:true });
+setAppVh();
+addEventListener('resize', setAppVh, {passive:true});
+addEventListener('orientationchange', setAppVh, {passive:true});
+if (window.visualViewport) window.visualViewport.addEventListener('resize', setAppVh, {passive:true});
 
-/* ================= Canvas + DPR scaling ================= */
+/* ---------- Canvas ---------- */
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
-function resizeCanvas(){
+function fitCanvasDPR(){
   const rect = canvas.getBoundingClientRect();
-  let cssW = Math.max(1, Math.floor(rect.width || window.innerWidth));
-  let cssH = Math.max(1, Math.floor(rect.height || window.innerHeight));
-  if (cssH < 120) {
-    const vh = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--app-vh')) || window.innerHeight || 540;
-    cssH = Math.max(300, Math.floor(vh - 20));
-  }
   const DPR = Math.max(1, Math.floor(window.devicePixelRatio || 1));
-  canvas.width  = cssW * DPR;
-  canvas.height = cssH * DPR;
+  canvas.width  = Math.max(1, Math.floor(rect.width * DPR));
+  canvas.height = Math.max(1, Math.floor(rect.height * DPR));
   ctx.setTransform(DPR,0,0,DPR,0,0);
-  ctx.imageSmoothingEnabled = true;
-  W = cssW; H = cssH; floorY = H * 0.78;
-  if (player && player.y > floorY) player.y = floorY;
 }
-addEventListener('load', () => { pumpVhUpdates(); resizeCanvas(); });
-addEventListener('pageshow', () => { pumpVhUpdates(); resizeCanvas(); });
-addEventListener('resize', resizeCanvas);
-if (window.visualViewport) window.visualViewport.addEventListener('resize', resizeCanvas);
+fitCanvasDPR();
+addEventListener('resize', fitCanvasDPR);
 
-/* ================= Game state ================= */
-let W = 960, H = 540;
-let floorY = H * 0.78;
+/* ---------- Assets ---------- */
+const vespaImg = new Image();
+vespaImg.src = 'Blue Vespa Right.png';
 
+/* ---------- Game state ---------- */
+let running = false;
+let score = 0;
+const player = { x: 50, y: 0, w: 60, h: 40, dy: 0, onGround: false, jumps: 0 };
+let obstacles = [];
+
+// Speed model (simple, keeps your warmup & ramp)
+const SPEED_BASE = 4;      // start pace
+const SPEED_MAX  = 15;     // soft ceiling
+let speed = SPEED_BASE;
+
+// World knobs
 const world = {
-  // slow, enjoyable difficulty via speed only
-  speed: 6,
-  baseSpeed: 6,
-  maxSpeed: 13.5,
-  score: 0,
-  alive: false,
-
-  // distance until next spawn (pixels) – computed each spawn
-  spawnDist: 600,
-
-  // RANDOM obstacle mix with anti‑streak rules
-  pTallBase: 0.32,
-  pTallLate: 0.42,
+  // favor single jumps
+  pTallBase: 0.14,
+  pTallLate: 0.34,
   tallStreak: 0,
   singleStreak: 0,
-  maxTallStreak: 2,
-  maxSingleStreak: 3,
+  maxTallStreak: 1,
+  maxSingleStreak: 4,
 
-  // snappy rhythm: target reaction times (seconds)
+  warmupScore: 150,    // your choice
+  rampRate:   0.0025,  // your choice
+
+  // reaction-time targets (seconds) for fair spacing
   rtSingle: 0.90,
   rtTall:   1.05,
-  rtJitter: 0.10,
-
-  // long, gentle ramp settings
-  warmupScore: 150,
-  rampRate:   0.00250
+  rtJitter: 0.10
 };
 
-const player = { x: 120, y: floorY, vy: 0, w: 120, h: 80, onGround: true };
-const obstacles = [];
-const TRI_COLORS = ['#ff6b6b','#ffd166','#06d6a0','#118ab2','#8338ec','#ef476f','#f9c74f','#90be6d'];
+// Distance-based spawning (keeps fair reaction time)
+let distSinceSpawn = 0;     // pixels traveled since last spawn
+let nextGapPx = 600;        // distance until next obstacle
 
-/* ---- Jump physics (updated for easier early double-jumps) ---- */
-const gravity   = 0.90;
-const JUMP_VEL_1 = -14.8; // tiny boost
-const JUMP_VEL_2 = -13.2; // more hang time
-const COYOTE_FRAMES = 8;
-const BUFFER_FRAMES = 10;
+/* ---------- Physics ---------- */
+const GRAVITY = 0.5;
+const JUMP_VEL = 9; // each jump impulse
 
-let coyote = 0, jumpBuffer = 0, usedDouble = false;
-
-/* ================= Vespa sprite ================= */
-const vespaImg = new Image();
-let vespaReady = false;
-vespaImg.onload = () => vespaReady = true;
-vespaImg.src = 'Blue Vespa Right.png'; // must exist next to this file
-
-/* ================= UI refs ================= */
-const startBtn = document.getElementById('startBtn');
-const restartBtn = document.getElementById('restartBtn');
-
-const scoreboard = document.getElementById('scoreboard');
-const finalScoreEl = document.getElementById('finalScore');
-const initialsEl = document.getElementById('playerName');
-const submitBtn = document.getElementById('submitScore');
-const skipBtn = document.getElementById('skipBtn');
-const goRestartBtn = document.getElementById('goRestartBtn');
-const lbEl = document.getElementById('lb');
-const lbSub = document.getElementById('lbSub');
-
-/* ================= Leaderboard API ================= */
-const API = 'https://scooter-game-api.vercel.app';
-async function getTop10(){
-  try{
-    const r = await fetch(`${API}/api/leaderboard`, { cache: 'no-store' });
-    if(!r.ok) return [];
-    return await r.json();
-  }catch{ return []; }
-}
-async function saveScore(name, score){
-  const r = await fetch(`${API}/api/leaderboard`, {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ name, score })
-  });
-  const txt = await r.text(); let data=null; try{ data = txt?JSON.parse(txt):null; }catch{}
-  if(!r.ok) throw new Error(data?.error || txt || 'save failed');
-  return data;
-}
-function renderLB(list){
-  lbEl.innerHTML = '';
-  list.forEach((e,i)=>{
-    const li = document.createElement('li');
-    const name = (e.name||'---').toUpperCase().slice(0,3);
-    li.innerHTML = `<span>${i+1}.) ${name}</span><span>${e.score}</span>`;
-    lbEl.appendChild(li);
-  });
-  lbSub.textContent = list.length ? 'Global leaderboard' : 'No scores yet — be the first!';
-}
-
-/* ================= Difficulty ramp ================= */
-function speedForScore(s) {
-  if (s < world.warmupScore) return world.baseSpeed;
-  const span = world.maxSpeed - world.baseSpeed;
-  const t = s - world.warmupScore;
-  return world.baseSpeed + span * (1 - Math.exp(-world.rampRate * t));
-}
-
-/* ================= Spawn helpers (random but fair) ================= */
-function decideTall(score) {
-  // blend toward late-game probability
-  const lateBlend = Math.min(1, Math.max(0, (score - world.warmupScore) / 1500));
+/* ---------- Obstacle selection ---------- */
+function decideTall(scoreNow){
+  // blend toward late-game chance
+  const lateBlend = Math.min(1, Math.max(0, (scoreNow - world.warmupScore) / 1500));
   let pTall = world.pTallBase * (1 - lateBlend) + world.pTallLate * lateBlend;
 
-  // anti‑streak
+  // early bias toward singles
+  if (scoreNow < 800) pTall *= 0.55;
+
+  // cooldown after a tall
+  if (world.tallStreak > 0) pTall *= 0.5;
+
+  // hard caps (no spam)
   if (world.tallStreak   >= world.maxTallStreak)   return false;
   if (world.singleStreak >= world.maxSingleStreak) return true;
 
   return Math.random() < pTall;
 }
 
-/* ---- Tall height scales with score (easier at start, tougher later) ---- */
-function chooseTriangleSpec(isTall) {
-  const s = world.score;
+// Size for triangle (base == width, height)
+function triangleSpec(isTall){
+  // single vs tall heights
+  const smallMin = 28, smallMax = 42;   // single-jump
+  // tall ramps a bit with score so early game is gentler
+  const ramp = Math.min(1, Math.max(0, score / 1200));
+  const tallMin0=42, tallMax0=60, tallMin1=50, tallMax1=74;
+  const tallMin = tallMin0 + (tallMin1 - tallMin0) * ramp;
+  const tallMax = tallMax0 + (tallMax1 - tallMax0) * ramp;
 
-  // Single-jump band unchanged
-  const smallHmin = 52,  smallHmax = 92;
+  const h = isTall
+    ? tallMin + Math.random()*(tallMax - tallMin)
+    : smallMin + Math.random()*(smallMax - smallMin);
 
-  // Tall band ramps with score: starts easier, reaches full height by ~2000 score
-  const tallRamp = Math.min(1, Math.max(0, s / 2000));
-  const tallHmin0 = 100, tallHmax0 = 130; // early game (easier)
-  const tallHmin1 = 112, tallHmax1 = 160; // later game
-
-  const tallHmin = tallHmin0 + (tallHmin1 - tallHmin0) * tallRamp;
-  const tallHmax = tallHmax0 + (tallHmax1 - tallHmax0) * tallRamp;
-
-  const height = isTall
-    ? tallHmin  + Math.random() * (tallHmax  - tallHmin)
-    : smallHmin + Math.random() * (smallHmax - smallHmin);
-
-  const base = 44 + Math.random() * 54; // variety
-  return { base, height };
+  const base = h * 0.9 + Math.random()*8; // slight variety
+  return { base, height: h };
 }
 
-/* ---- Keep reaction time fair; extra gap for tall triangles at low speed ---- */
-function planNextSpawnDistance(currentSpeed, isTall) {
-  const rtBase = isTall ? world.rtTall : world.rtSingle;
+/* ---------- Fair gap planner (distance, not time) ---------- */
+function planNextGapPx(currentSpeed, nextIsTall){
+  // px per second ≈ speed * 60 (assuming ~60fps)
+  const pxPerSec = Math.max(1, currentSpeed * 60);
+
+  const rtBase = nextIsTall ? world.rtTall : world.rtSingle;
   const jitter = (Math.random()*2 - 1) * world.rtJitter;
   const rt = Math.max(0.65, rtBase + jitter);
 
-  let margin = 70 + currentSpeed * 5; // base margin scales with speed
+  // margin grows with speed a bit; tall needs extra breathing room
+  const margin = 90 + currentSpeed*6 + (nextIsTall ? 40 : 0);
 
-  // Extra room for tall triangles when speed is low to finish the double-jump arc
-  if (isTall && currentSpeed < 8) {
-    const ease = (8 - currentSpeed) / 4;            // 0..0.5 roughly
-    margin += 80 * Math.max(0, Math.min(1, ease));  // up to +80px
-  }
-
-  // distance ≈ speed(px/frame) * frames + margin
-  return Math.max(240, currentSpeed * (rt * 60) + margin);
+  return Math.max(240, Math.round(pxPerSec * rt + margin));
 }
 
-function spawnTriangle(){
-  const isTall = decideTall(world.score);
-  const spec = chooseTriangleSpec(isTall);
-  const color = TRI_COLORS[(Math.random()*TRI_COLORS.length)|0];
-  obstacles.push({ x: W + 40, y: floorY, base: spec.base, height: spec.height, color });
+/* ---------- Spawn ---------- */
+function spawnObstacle(isTall){
+  const spec = triangleSpec(isTall);
+  const colorTall = '#ef476f', colorSmall = '#06d6a0';
+  obstacles.push({
+    x: canvas.width + 20,
+    // y references the triangle base line
+    y: canvas.height - 2,
+    base: spec.base,
+    height: spec.height,
+    color: isTall ? colorTall : colorSmall,
+    tall: isTall
+  });
 
-  // update streaks
-  if (isTall) { world.tallStreak++; world.singleStreak = 0; }
-  else        { world.singleStreak++; world.tallStreak  = 0; }
+  if (isTall){ world.tallStreak++; world.singleStreak = 0; }
+  else       { world.singleStreak++; world.tallStreak  = 0; }
 
-  // schedule next gap
-  world.spawnDist = planNextSpawnDistance(world.speed, isTall);
+  // Plan NEXT gap using the current speed and a guess for the next obstacle type
+  const guessNextTall = decideTall(score); // peek using current score
+  nextGapPx = planNextGapPx(speed, guessNextTall);
+  distSinceSpawn = 0;
 }
 
-/* ================= Collision helpers ================= */
-function getPlayerBounds(){
-  // tighter Vespa: ~76% width, ~78% height, lifted slightly
-  const w = player.w * 0.76;
-  const h = player.h * 0.78;
-  const x = player.x - w/2;
-  const y = (player.y - player.h) + (player.h - h) - 4;
-  return { x, y, w, h };
-}
-function triTopY(tri, x){
-  const x0 = tri.x, x2 = tri.x + tri.base;
-  if (x <= x0 || x >= x2) return Infinity;
-  const xc = (x0 + x2) * 0.5;
-  const dx = Math.abs(x - xc);
-  const t = 1 - (dx / (tri.base * 0.5));  // 0 at edges -> 1 center
-  return tri.y - tri.height * Math.max(0, Math.min(1, t));
-}
-function rectHitsTriangle(rect, tri){
-  if (rect.x + rect.w <= tri.x || rect.x >= tri.x + tri.base) return false;
-  const xFront = Math.min(rect.x + rect.w, tri.x + tri.base - 0.5);
-  const xMid   = Math.max(rect.x + rect.w - 10, rect.x + rect.w * 0.5);
-  const xBack  = Math.max(rect.x + 6, rect.x);
-  const yTopF = triTopY(tri, xFront);
-  const yTopM = triTopY(tri, xMid);
-  const yTopB = triTopY(tri, xBack);
-  const yBottom = rect.y + rect.h;
-  return (yBottom > yTopF) || (yBottom > yTopM) || (yBottom > yTopB);
-}
-
-/* ================= Control ================= */
-function reset(){
-  world.score = 0;
-  world.speed = world.baseSpeed;
-  world.spawnDist = 600;
+/* ---------- Core loop ---------- */
+function resetGame(){
+  score = 0;
+  speed = SPEED_BASE;
+  obstacles.length = 0;
   world.tallStreak = 0;
   world.singleStreak = 0;
-  obstacles.length = 0;
-  player.x = Math.max(120, 0.18 * W);
-  player.y = floorY; player.vy = 0; player.onGround = true;
-  coyote = 0; jumpBuffer = 0; usedDouble = false;
-}
-function startGame(){
-  reset();
-  world.alive = true;
-  startBtn.style.display = 'none';
-  restartBtn.style.display = 'none';
-  scoreboard.style.display = 'none';
-}
-function endGame(){
-  world.alive = false;
-  finalScoreEl.textContent = Math.floor(world.score);
-  initialsEl.value = '';
-  scoreboard.style.display = 'flex';
-  lbSub.textContent = 'Loading…';
-  getTop10().then(renderLB);
+  distSinceSpawn = 0;
+  nextGapPx = 520;
+
+  player.y = canvas.height - player.h;
+  player.dy = 0;
+  player.onGround = true;
+  player.jumps = 0;
 }
 
-/* ================= Input ================= */
+function startGame(){
+  document.getElementById('startScreen').style.display = 'none';
+  document.getElementById('gameOverScreen').style.display = 'none';
+  resetGame();
+  running = true;
+  requestAnimationFrame(frame);
+}
+
+function endGame(){
+  running = false;
+  document.getElementById('finalScore').textContent = `Score: ${score}`;
+  document.getElementById('gameOverScreen').style.display = 'flex';
+}
+
+function frame(){
+  if (!running) return;
+
+  // Clear
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  // Gentle speed ramp: base + ramp per point, capped
+  speed = Math.min(SPEED_MAX, SPEED_BASE + world.rampRate * score);
+
+  // Player physics
+  player.y += player.dy;
+  player.dy += GRAVITY;
+  if (player.y >= canvas.height - player.h){
+    player.y = canvas.height - player.h;
+    player.dy = 0;
+    if (!player.onGround){ player.onGround = true; player.jumps = 0; }
+  } else {
+    player.onGround = false;
+  }
+
+  // Draw ground line
+  ctx.fillStyle = '#2a2a2a';
+  ctx.fillRect(0, canvas.height-2, canvas.width, 2);
+
+  // Draw player
+  if (vespaImg.complete && vespaImg.naturalWidth){
+    ctx.drawImage(vespaImg, player.x, player.y, player.w, player.h);
+  } else {
+    ctx.fillStyle = '#1e8bff';
+    ctx.fillRect(player.x, player.y, player.w, player.h);
+  }
+
+  // Move & draw obstacles
+  ctx.fillStyle = '#000';
+  for (let i=obstacles.length-1; i>=0; i--){
+    const o = obstacles[i];
+    o.x -= speed;
+
+    // Triangle (filled)
+    ctx.fillStyle = o.color;
+    ctx.beginPath();
+    ctx.moveTo(o.x, o.y);
+    ctx.lineTo(o.x + o.base/2, o.y - o.height);
+    ctx.lineTo(o.x + o.base, o.y);
+    ctx.closePath();
+    ctx.fill();
+
+    // AABB vs triangle bbox (simple, fair enough for this version)
+    const bbox = { x:o.x, y:o.y - o.height, w:o.base, h:o.height };
+    if (player.x < bbox.x + bbox.w &&
+        player.x + player.w > bbox.x &&
+        player.y < bbox.y + bbox.h &&
+        player.y + player.h > bbox.y){
+      endGame();
+    }
+
+    // Scored past
+    if (o.x + o.base < 0){
+      obstacles.splice(i,1);
+      score++;
+    }
+  }
+
+  // Distance-based spawn: accumulate distance traveled this frame
+  distSinceSpawn += speed;
+  if (distSinceSpawn >= nextGapPx){
+    const tall = decideTall(score);
+    spawnObstacle(tall);
+  }
+
+  // HUD
+  ctx.fillStyle = '#000';
+  ctx.font = '16px Arial';
+  ctx.fillText(`Score: ${score}`, 10, 22);
+
+  requestAnimationFrame(frame);
+}
+
+/* ---------- Controls ---------- */
+function jump(){
+  if (player.jumps < 2){
+    player.dy = -JUMP_VEL;
+    player.jumps++;
+    player.onGround = false;
+  }
+}
+
+document.getElementById('startButton').addEventListener('click', (e)=>{ e.preventDefault(); startGame(); });
+document.getElementById('restartButton').addEventListener('click', (e)=>{ e.preventDefault(); startGame(); });
+
 document.addEventListener('keydown', (e)=>{
-  if(e.code==='Space' || e.keyCode===38){
+  if (e.code === 'Space'){
     e.preventDefault();
-    if(!world.alive){ startGame(); return; }
-    jumpBuffer = BUFFER_FRAMES;
-  }else if(e.code==='KeyR'){
+    if (!running) startGame(); else jump();
+  } else if (e.code === 'KeyR'){
     e.preventDefault();
     startGame();
   }
 });
-canvas.addEventListener('pointerdown', (e)=>{
-  if(e.pointerType==='mouse') return;
-  if(!world.alive){ e.preventDefault(); startGame(); return; }
-  e.preventDefault(); jumpBuffer = BUFFER_FRAMES;
-}, { passive:false });
+
 canvas.addEventListener('touchstart', (e)=>{
-  if(!world.alive){ e.preventDefault(); startGame(); return; }
-  e.preventDefault(); jumpBuffer = BUFFER_FRAMES;
-}, { passive:false });
+  e.preventDefault();
+  if (!running) startGame(); else jump();
+}, {passive:false});
 
-function startFromUI(e){ if(e) e.preventDefault(); startGame(); }
-function restartFromUI(e){ if(e) e.preventDefault(); startGame(); }
-startBtn.addEventListener('click', startFromUI);
-startBtn.addEventListener('pointerdown', startFromUI, { passive:false });
-startBtn.addEventListener('touchstart', startFromUI, { passive:false });
-restartBtn.addEventListener('click', restartFromUI);
-restartBtn.addEventListener('pointerdown', restartFromUI, { passive:false });
-restartBtn.addEventListener('touchstart', restartFromUI, { passive:false });
-goRestartBtn.addEventListener('click', restartFromUI);
-goRestartBtn.addEventListener('pointerdown', restartFromUI, { passive:false });
-goRestartBtn.addEventListener('touchstart', restartFromUI, { passive:false });
-
-/* Initials constraints + save/skip */
-function sanitizeInitials(s){ return (s||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,3); }
-initialsEl.addEventListener('input', ()=>{
-  const clean = sanitizeInitials(initialsEl.value);
-  if(initialsEl.value !== clean) initialsEl.value = clean;
-});
-submitBtn.addEventListener('click', async ()=>{
-  const name = sanitizeInitials(initialsEl.value);
-  if(!name){ scoreboard.style.display='none'; return; }
-  try{
-    submitBtn.textContent='Saving…'; submitBtn.disabled=true;
-    await saveScore(name, Math.floor(world.score));
-    const lb = await getTop10(); renderLB(lb);
-  }catch(err){ alert('Save failed: ' + (err.message||err)); }
-  finally{ submitBtn.textContent='Save'; submitBtn.disabled=false; }
-});
-skipBtn.addEventListener('click', ()=>{ scoreboard.style.display='none'; });
-
-/* ================= Game loop ================= */
-function update(){
-  // Slow, long difficulty ramp
-  world.speed = Math.min(world.maxSpeed, speedForScore(world.score));
-
-  if(world.alive){
-    // Jump logic (coyote + buffer + double)
-    if(player.onGround) coyote = COYOTE_FRAMES; else if(coyote>0) coyote--;
-    if(jumpBuffer>0) jumpBuffer--;
-    if(jumpBuffer>0 && (player.onGround || coyote>0)){
-      player.vy = JUMP_VEL_1; player.onGround=false; usedDouble=false; jumpBuffer=0;
-    } else if(jumpBuffer>0 && !player.onGround && !usedDouble){
-      player.vy = JUMP_VEL_2; usedDouble=true; jumpBuffer=0;
-    }
-
-    // Gravity
-    player.vy += gravity; player.y += player.vy;
-    if(player.y >= floorY){ player.y=floorY; player.vy=0; if(!player.onGround){ player.onGround=true; usedDouble=false; } }
-    else { player.onGround=false; }
-
-    // Move obstacles
-    for(let i=obstacles.length-1;i>=0;i--){
-      const o = obstacles[i]; o.x -= world.speed; if(o.x + o.base < -120) obstacles.splice(i,1);
-    }
-
-    // Spawn with reaction‑time based gaps
-    world.spawnDist -= world.speed;
-    if(world.spawnDist <= 0){ spawnTriangle(); }
-
-    // Score over time
-    world.score += 0.24 + world.speed*0.013;
-
-    // Collision
-    const pb = getPlayerBounds();
-    for(const o of obstacles){
-      const ob = { x:o.x, y:o.y - o.height, w:o.base, h:o.height };
-      const bboxOverlap = pb.x < ob.x + ob.w && pb.x + pb.w > ob.x && pb.y < ob.y + ob.h && pb.y + pb.h > ob.y;
-      if (bboxOverlap && rectHitsTriangle(pb, o)) { endGame(); break; }
-    }
-  }
-
-  draw();
-  requestAnimationFrame(update);
+/* ---------- Leaderboard ---------- */
+function saveScore(){
+  const initials = (document.getElementById('playerInitials').value || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0,3);
+  if (!initials) { document.getElementById('gameOverScreen').style.display='none'; return; }
+  fetch('https://scooter-game-api.vercel.app/api/leaderboard', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ name: initials, score })
+  }).then(()=>loadLeaderboard());
 }
-
-function draw(){
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-
-  // Sky
-  ctx.fillStyle = '#a6d4ff'; ctx.fillRect(0,0,W,H);
-
-  // Road
-  ctx.fillStyle = '#2a2a2a'; ctx.fillRect(0, floorY, W, H-floorY);
-  ctx.fillStyle = 'rgba(255,255,255,.25)';
-  const stripeW=120, stripeH=6, phase=(world.score*0.5)%(stripeW*2);
-  for(let x=-phase; x<W; x+=stripeW*2){
-    const xx1=Math.round(x), xx2=Math.round(x+60);
-    ctx.fillRect(xx1, floorY+30, stripeW, stripeH);
-    ctx.fillRect(xx2, floorY+60, stripeW, stripeH);
-  }
-
-  // Triangles
-  for(const o of obstacles){
-    ctx.fillStyle=o.color; ctx.beginPath();
-    const x0=Math.round(o.x), y0=Math.round(o.y);
-    const x1=Math.round(o.x + o.base/2), y1=Math.round(o.y - o.height);
-    const x2=Math.round(o.x + o.base);
-    ctx.moveTo(x0,y0); ctx.lineTo(x1,y1); ctx.lineTo(x2,y0); ctx.closePath(); ctx.fill();
-  }
-
-  // Vespa sprite (fallback to rect while loading)
-  if (vespaReady) {
-    ctx.drawImage(vespaImg,
-      Math.round(player.x - player.w/2),
-      Math.round(player.y - player.h),
-      player.w, player.h
-    );
-  } else {
-    ctx.fillStyle = '#1e8bff';
-    ctx.fillRect(Math.round(player.x - player.w/2), Math.round(player.y - player.h), player.w, player.h);
-  }
-
-  // Shadow
-  ctx.fillStyle='rgba(0,0,0,.16)';
-  ctx.beginPath(); ctx.ellipse(player.x, player.y-2, player.w*0.44, 8, 0, 0, Math.PI*2); ctx.fill();
-
-  // HUD
-  ctx.fillStyle='#111'; ctx.font='16px system-ui, sans-serif';
-  ctx.fillText(`Score: ${Math.floor(world.score)}`, 12, 22);
+function loadLeaderboard(){
+  fetch('https://scooter-game-api.vercel.app/api/leaderboard')
+    .then(r=>r.json())
+    .then(list=>{
+      let html = '<h3 style="margin:6px 0">Top 10</h3><ol style="margin:0 auto; padding:0 0 0 22px; text-align:left; display:inline-block">';
+      list.forEach(item=>{ html += `<li><b>${(item.name||'---').toUpperCase().slice(0,3)}</b>: ${item.score}</li>`; });
+      html += '</ol>';
+      document.getElementById('leaderboard').innerHTML = html;
+    }).catch(()=>{ document.getElementById('leaderboard').textContent = 'Top 10'; });
 }
+document.getElementById('saveScoreButton').addEventListener('click', saveScore);
+document.getElementById('skipButton').addEventListener('click', ()=>{ document.getElementById('gameOverScreen').style.display='none'; });
 
-/* ================= Kickoff ================= */
-resizeCanvas();
-requestAnimationFrame(update);
+loadLeaderboard();
 </script>
 </body>
 </html>
