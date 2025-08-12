@@ -12,10 +12,15 @@
     overflow:hidden;display:flex;flex-direction:column;align-items:center;
     padding-bottom:env(safe-area-inset-bottom);-webkit-user-select:none;user-select:none;
   }
-  #leaderboard{width:100%;max-width:720px;padding:8px 12px 6px;background:#212529;color:#fff;border-bottom:2px solid rgba(255,255,255,.08);box-sizing:border-box}
+  /* Leaderboard (shown on Start & Game Over; hidden in play) */
+  #leaderboard{
+    width:100%;max-width:720px;padding:8px 12px 6px;background:#212529;color:#fff;
+    border-bottom:2px solid rgba(255,255,255,.08);box-sizing:border-box
+  }
   #leaderboard.hidden{display:none}
   #leaderboard h3{margin:6px 0 8px;text-align:center;letter-spacing:.5px}
   #leaderboard ol{margin:0 auto 6px;padding-left:24px;max-width:680px;line-height:1.35}
+  /* Game area */
   #wrap{position:relative;width:100%;max-width:720px}
   canvas{
     display:block;width:100%;
@@ -24,6 +29,7 @@
     min-height:420px;max-height:calc(100vh - env(safe-area-inset-bottom));
     border:2px solid #000;border-radius:12px;box-sizing:border-box;touch-action:manipulation;
   }
+  /* Overlays */
   .overlay{
     position:absolute;inset:0;z-index:10;display:flex;flex-direction:column;align-items:center;justify-content:center;
     background:rgba(255,255,255,.88);color:#111;text-align:center;padding:18px
@@ -71,7 +77,7 @@
   </div>
 
 <script>
-/* ===== viewport height fix ===== */
+/* ===== viewport height fix (iOS/Firefox toolbars) ===== */
 function setAppVh(){
   const vv=window.visualViewport;
   const h=vv&&vv.height ? vv.height : (window.innerHeight||document.documentElement.clientHeight||0);
@@ -115,28 +121,26 @@ vespaImg.onerror=()=>console.warn('Vespa PNG not found. Check file name/path.');
 /* ===== world & tuning (time‑based) ===== */
 let running=false, score=0;
 let scoreTime=0, scoreBonus=0;   // live score parts
-let elapsed=0;
+let elapsed=0;                   // seconds since run start
 let last=performance.now();
 
 let obstacles=[];
 
-/* speed in px/second (consistent across FPS) */
-const SPEED_BASE_PPS = 150;    // calm start
-const SPEED_MAX_PPS  = 800;    // reasonable cap
-const ACCEL_PPS2     = 6;      // gentle
-const WARMUP_SEC     = 1.8;    // fixed slow opening
+/* speed in px/second (consistent across FPS) — faster start + quicker ramp */
+const SPEED_BASE_PPS = 220;   // was 150
+const SPEED_MAX_PPS  = 1100;  // was 800
+const ACCEL_PPS2     = 14;    // was 6
+const WARMUP_SEC     = 0.6;   // shorter warmup
 let  speedPPS        = SPEED_BASE_PPS;
 
-/* jump physics: floatier; bigger double */
-const GRAVITY_ASC  = 0.38;
-const GRAVITY_DESC = 0.52;
-const JUMP_VEL_1   = 12.2;
-const JUMP_VEL_2   = 12.8;
+/* jump physics — snappier & more responsive */
+const GRAVITY_ASC  = 0.46;    // was 0.38
+const GRAVITY_DESC = 0.70;    // was 0.52
+const JUMP_VEL_1   = 12.6;    // was 12.2
+const JUMP_VEL_2   = 13.2;    // was 12.8
 
-/* obstacle bands + types */
+/* size bands + types — fully random from the start (no early bias) */
 const BANDS = ['small','medium','tall'];
-const BAND_WEIGHTS_EARLY = {small:0.5, medium:0.32, tall:0.18};
-const BAND_WEIGHTS_LATE  = {small:0.4, medium:0.35, tall:0.25};
 let lastBand=null, sameBandStreak=0, MAX_SAME_BAND=2;
 
 const COLORS = {
@@ -145,7 +149,7 @@ const COLORS = {
   dog:'#8d6e63', chick:'#ffeb3b', chickBeak:'#ff9800'
 };
 
-let distSinceSpawn=0, nextGapPx=620;  // wider first gap
+let distSinceSpawn=0, nextGapPx=520;  // a bit sooner since speed is higher
 
 /* ===== helpers ===== */
 function drawRoad(){
@@ -193,47 +197,41 @@ function aabbOverlap(a,b){
   return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
 }
 
-/* bias to middle heights (Flappy‑Bird‑ish rhythm) */
+/* bias to middle heights (keeps rhythm readable) */
 function randMid(){ return (Math.random()+Math.random())/2; }
 
-/* band picker with anti‑streak + late game shift */
+/* UNBIASED band picker (uniform) with anti‑streak */
 function pickBand(){
-  const t = Math.min(1, score/1200);
-  const w = {
-    small: BAND_WEIGHTS_EARLY.small*(1-t) + BAND_WEIGHTS_LATE.small*t,
-    medium:BAND_WEIGHTS_EARLY.medium*(1-t)+ BAND_WEIGHTS_LATE.medium*t,
-    tall:  BAND_WEIGHTS_EARLY.tall*(1-t)  + BAND_WEIGHTS_LATE.tall*t
-  };
   if(lastBand && sameBandStreak>=MAX_SAME_BAND){
-    // force a different band
     const others=BANDS.filter(b=>b!==lastBand);
-    return others[Math.floor(Math.random()*others.length)];
+    const pick=others[Math.floor(Math.random()*others.length)];
+    lastBand=pick; sameBandStreak=1;
+    return pick;
   }
-  const r=Math.random()*(w.small+w.medium+w.tall);
-  const pick = r<w.small ? 'small' : (r<(w.small+w.medium)?'medium':'tall');
+  const pick = BANDS[Math.floor(Math.random()*BANDS.length)];
   if(pick===lastBand) sameBandStreak++; else { lastBand=pick; sameBandStreak=1; }
   return pick;
 }
 
-/* obstacle spec per band & type */
+/* uniform type picker from the start */
+const OBSTACLE_TYPES = ['triangle','tree','dog','chick'];
+function pickObstacleType(){
+  return OBSTACLE_TYPES[Math.floor(Math.random()*OBSTACLE_TYPES.length)];
+}
+
+/* specs per band — no late ramp, but capped for small screens */
 function triangleSpecByBand(band){
-  const ramp=Math.min(1, Math.max(0, score/1200));
   let hMin,hMax;
   if(band==='small'){ hMin=26; hMax=40; }
   else if(band==='medium'){ hMin=44; hMax=56; }
-  else { // tall
-    const tMinS=48, tMinE=58, tMaxS=66, tMaxE=88;
-    hMin=tMinS*(1-ramp)+tMinE*ramp;
-    hMax=tMaxS*(1-ramp)+tMaxE*ramp;
-  }
-  // cap for tiny screens
+  else { hMin=58; hMax=88; } // tall
   const cap=Math.max(60, H*0.55);
   hMax=Math.min(hMax, cap);
   const h = hMin + randMid()*(hMax-hMin);
-  const base = h * (0.85 + Math.random()*0.10);
+  const base = h * (0.88 + Math.random()*0.08); // wider, fairer
   return {base, height:h};
 }
-function rectSpecByBand(band){ // for dog/chick/tree crown size proxy
+function rectSpecByBand(band){
   let wMin,wMax,hMin,hMax;
   if(band==='small'){ wMin=26; wMax=40; hMin=26; hMax=38; }
   else if(band==='medium'){ wMin=42; wMax=56; hMin=34; hMax=52; }
@@ -243,32 +241,14 @@ function rectSpecByBand(band){ // for dog/chick/tree crown size proxy
   return {w,h};
 }
 
-/* object picker */
-const OBSTACLE_TYPES = ['triangle','tree','dog','chick']; // add more later
-function pickObstacleType(){
-  // triangles slightly more common early; variety grows
-  const t=Math.min(1, score/1500);
-  const weights = {
-    triangle: 0.50*(1-t) + 0.35*t,
-    tree:     0.25*(1-t) + 0.28*t,
-    dog:      0.15*(1-t) + 0.20*t,
-    chick:    0.10*(1-t) + 0.17*t
-  };
-  const r=Math.random()*(weights.triangle+weights.tree+weights.dog+weights.chick);
-  if(r<weights.triangle) return 'triangle';
-  if(r<weights.triangle+weights.tree) return 'tree';
-  if(r<weights.triangle+weights.tree+weights.dog) return 'dog';
-  return 'chick';
-}
-
-/* planning spawn spacing (wider with speed & band) */
+/* spacing planner — scales with speed & band */
 function planNextGapPx(vPPS, band){
   const pxps=Math.max(1, vPPS);
   const bandFactor = band==='tall' ? 1.15 : band==='medium' ? 1.05 : 1.0;
-  const baseRT = band==='tall' ? 1.05 : band==='medium' ? 0.98 : 0.90;
-  const rt = Math.max(0.7, baseRT + ((Math.random()*2-1)*0.10));
-  const margin = (140 + (vPPS/10)) * bandFactor + (band==='tall'?70:(band==='medium'?36:16));
-  return Math.max(280, Math.round(pxps*rt + margin));
+  const baseRT = band==='tall' ? 1.00 : band==='medium' ? 0.92 : 0.86; // slightly tighter rhythm
+  const rt = Math.max(0.66, baseRT + ((Math.random()*2-1)*0.10));
+  const margin = (130 + (vPPS/11)) * bandFactor + (band==='tall'?66:(band==='medium'?32:14));
+  return Math.max(240, Math.round(pxps*rt + margin));
 }
 
 /* spawn */
@@ -298,7 +278,7 @@ function spawnObstacle(){
   distSinceSpawn=0;
 }
 
-/* drawing & collision per kind */
+/* draw & collide per kind */
 function drawAndCollideObstacle(o, hit){
   if(o.kind==='triangle'){
     ctx.fillStyle=o.color; ctx.beginPath();
@@ -306,56 +286,41 @@ function drawAndCollideObstacle(o, hit){
     ctx.lineTo(o.x+o.base/2,o.y-o.height);
     ctx.lineTo(o.x+o.base,o.y);
     ctx.closePath(); ctx.fill();
-
     if(hitsTriangle(hit, o)) return true;
 
   } else if(o.kind==='tree'){
-    // trunk
-    const trunkH=o.trunkH, trunkW=o.trunkW;
     ctx.fillStyle=COLORS.trunk;
-    ctx.fillRect(o.x + (o.w-trunkW)/2, o.y-trunkH, trunkW, trunkH);
-    // crown
+    ctx.fillRect(o.x + (o.w-o.trunkW)/2, o.y-o.trunkH, o.trunkW, o.trunkH);
     ctx.fillStyle=COLORS.tree;
     ctx.beginPath();
-    ctx.ellipse(o.x+o.w/2, o.y-trunkH - o.crownR*0.6, o.crownR*0.85, o.crownR*0.7, 0, 0, Math.PI*2);
+    ctx.ellipse(o.x+o.w/2, o.y-o.trunkH - o.crownR*0.6, o.crownR*0.85, o.crownR*0.7, 0, 0, Math.PI*2);
     ctx.fill();
-    // padded AABB collision
-    const box={x:o.x+6, y:o.y - (trunkH + o.crownR*1.2), w:o.w-12, h:(trunkH + o.crownR*1.2)};
+    const box={x:o.x+6, y:o.y - (o.trunkH + o.crownR*1.2), w:o.w-12, h:(o.trunkH + o.crownR*1.2)};
     if(aabbOverlap(hit, box)) return true;
 
   } else if(o.kind==='dog'){
-    // body
-    const bodyH=o.h, bodyW=o.w;
-    const ry=8, rx=12;
+    const rx=12, ry=8;
     ctx.fillStyle=COLORS.dog;
-    roundRect(ctx, o.x, o.y-bodyH, bodyW, bodyH, rx, ry); ctx.fill();
-    // head
-    roundRect(ctx, o.x+bodyW*0.72, o.y-bodyH*0.9, bodyW*0.38, bodyH*0.55, 10,10); ctx.fill();
-    // collision box (friendly)
-    const box={x:o.x+6, y:o.y-bodyH, w:bodyW-12, h:bodyH};
+    roundRect(ctx, o.x, o.y-o.h, o.w, o.h, rx, ry); ctx.fill();
+    roundRect(ctx, o.x+o.w*0.72, o.y-o.h*0.9, o.w*0.38, o.h*0.55, 10,10); ctx.fill();
+    const box={x:o.x+6, y:o.y-o.h, w:o.w-12, h:o.h};
     if(aabbOverlap(hit, box)) return true;
 
   } else { // chick
-    const r=o.r;
-    // body
+    const r=o.r, cx=o.x+o.w/2, cy=o.y - r;
     ctx.fillStyle=COLORS.chick;
-    ctx.beginPath(); ctx.ellipse(o.x+o.w/2, o.y - r, r, r*0.9, 0, 0, Math.PI*2); ctx.fill();
-    // beak
+    ctx.beginPath(); ctx.ellipse(cx, cy, r, r*0.9, 0, 0, Math.PI*2); ctx.fill();
     ctx.fillStyle=COLORS.chickBeak;
     ctx.beginPath();
-    const cx=o.x+o.w/2, cy=o.y - r*0.9;
     ctx.moveTo(cx+r*0.2, cy);
     ctx.lineTo(cx+r*0.45, cy+r*0.12);
     ctx.lineTo(cx+r*0.45, cy-r*0.12);
     ctx.closePath(); ctx.fill();
-    // collision (AABB)
     const box={x:o.x+6, y:o.y - r*1.9, w:o.w-12, h:r*1.9};
     if(aabbOverlap(hit, box)) return true;
   }
   return false;
 }
-
-/* rounded rect helper */
 function roundRect(c, x, y, w, h, rx, ry){
   c.beginPath();
   c.moveTo(x+rx,y);
@@ -375,7 +340,7 @@ function resetGame(){
   score=0; scoreTime=0; scoreBonus=0; elapsed=0;
   speedPPS=SPEED_BASE_PPS;
   obstacles.length=0;
-  distSinceSpawn=0; nextGapPx=620;
+  distSinceSpawn=0; nextGapPx=520;
   lastBand=null; sameBandStreak=0;
 
   player.y=floorY-player.h; player.dy=0; player.onGround=true; player.jumps=0;
@@ -409,7 +374,7 @@ function frame(){
   elapsed += dt;
   const dtScale = Math.min(2.0, dt * 60); // ~60fps scale for jump physics
 
-  // consistent opening: hold base speed for WARMUP_SEC, then ramp
+  // faster opening + quicker ramp
   if (elapsed < WARMUP_SEC) { speedPPS = SPEED_BASE_PPS; }
   else {
     const t = elapsed - WARMUP_SEC;
@@ -442,10 +407,10 @@ function frame(){
 
     if(drawAndCollideObstacle(o, hit)){ endGame(); break; }
 
-    if(o.x + (o.base||o.w||o.r*2) < 0){
+    const span = (o.base||o.w||o.r*2);
+    if(o.x + span < 0){
       obstacles.splice(i,1);
-      // bonus per clear, based on band
-      scoreBonus += (o.band==='tall'?8:(o.band==='medium'?6:5));
+      scoreBonus += (o.band==='tall'?8:(o.band==='medium'?6:5)); // bonus by difficulty
     }
   }
 
@@ -457,7 +422,7 @@ function frame(){
   scoreTime += dt*10;              // ~10 pts/sec
   score = Math.max(0, Math.floor(scoreTime + scoreBonus));
 
-  // HUD
+  // HUD (bright with outline)
   ctx.save();
   ctx.fillStyle='#ffffff';
   ctx.font='18px system-ui, sans-serif';
