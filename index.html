@@ -204,7 +204,7 @@ function spawnObstacle(tall){
 
 /* ===== hitbox & triangle collision (forgiving) ===== */
 function getPlayerHitbox(){
-  const padX=player.w*0.22, padY=player.h*0.28;
+  const padX=player.w*0.18, padY=player.h*0.24;
   return { x:player.x+padX, y:player.y+padY, w:player.w-padX*2, h:player.h-padY*2 };
 }
 function pointInTri(px,py,ax,ay,bx,by,cx,cy){
@@ -218,7 +218,7 @@ function pointInTri(px,py,ax,ay,bx,by,cx,cy){
 function hitsTriangle(hit, tri){
   const ax=tri.x, bx=tri.x+tri.base, cx=tri.x+tri.base/2;
   const ay=tri.y, by=tri.y,            cy=tri.y-tri.height;
-  const pad=6;
+  const pad=5;
   if(hit.x+hit.w<=ax+pad) return false;
   if(hit.x>=bx-pad) return false;
   if(hit.y+hit.h<=cy+pad) return false;
