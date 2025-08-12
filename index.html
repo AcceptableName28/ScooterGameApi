@@ -212,9 +212,10 @@ const player = { x: 120, y: floorY, vy: 0, w: 120, h: 80, onGround: true };
 const obstacles = [];
 const TRI_COLORS = ['#ff6b6b','#ffd166','#06d6a0','#118ab2','#8338ec','#ef476f','#f9c74f','#90be6d'];
 
-const gravity = 0.9;
-const JUMP_VEL_1 = -14.5;
-const JUMP_VEL_2 = -12.2;
+/* ---- Jump physics (updated for easier early double-jumps) ---- */
+const gravity   = 0.90;
+const JUMP_VEL_1 = -14.8; // tiny boost
+const JUMP_VEL_2 = -13.2; // more hang time
 const COYOTE_FRAMES = 8;
 const BUFFER_FRAMES = 10;
 
@@ -289,23 +290,45 @@ function decideTall(score) {
   return Math.random() < pTall;
 }
 
+/* ---- Tall height scales with score (easier at start, tougher later) ---- */
 function chooseTriangleSpec(isTall) {
-  const smallHmin = 52,  smallHmax = 92;   // single-jump
-  const tallHmin  = 112, tallHmax  = 160;  // double-jump
+  const s = world.score;
+
+  // Single-jump band unchanged
+  const smallHmin = 52,  smallHmax = 92;
+
+  // Tall band ramps with score: starts easier, reaches full height by ~2000 score
+  const tallRamp = Math.min(1, Math.max(0, s / 2000));
+  const tallHmin0 = 100, tallHmax0 = 130; // early game (easier)
+  const tallHmin1 = 112, tallHmax1 = 160; // later game
+
+  const tallHmin = tallHmin0 + (tallHmin1 - tallHmin0) * tallRamp;
+  const tallHmax = tallHmax0 + (tallHmax1 - tallHmax0) * tallRamp;
+
   const height = isTall
     ? tallHmin  + Math.random() * (tallHmax  - tallHmin)
     : smallHmin + Math.random() * (smallHmax - smallHmin);
-  const base = 44 + Math.random() * 54;
+
+  const base = 44 + Math.random() * 54; // variety
   return { base, height };
 }
 
-// Keep reaction time roughly constant by widening gaps as speed rises
+/* ---- Keep reaction time fair; extra gap for tall triangles at low speed ---- */
 function planNextSpawnDistance(currentSpeed, isTall) {
   const rtBase = isTall ? world.rtTall : world.rtSingle;
   const jitter = (Math.random()*2 - 1) * world.rtJitter;
   const rt = Math.max(0.65, rtBase + jitter);
-  const margin = 70 + currentSpeed * 5;
-  return Math.max(220, currentSpeed * (rt * 60) + margin);
+
+  let margin = 70 + currentSpeed * 5; // base margin scales with speed
+
+  // Extra room for tall triangles when speed is low to finish the double-jump arc
+  if (isTall && currentSpeed < 8) {
+    const ease = (8 - currentSpeed) / 4;            // 0..0.5 roughly
+    margin += 80 * Math.max(0, Math.min(1, ease));  // up to +80px
+  }
+
+  // distance ≈ speed(px/frame) * frames + margin
+  return Math.max(240, currentSpeed * (rt * 60) + margin);
 }
 
 function spawnTriangle(){
@@ -318,7 +341,7 @@ function spawnTriangle(){
   if (isTall) { world.tallStreak++; world.singleStreak = 0; }
   else        { world.singleStreak++; world.tallStreak  = 0; }
 
-  // schedule next gap (bias by current choice for natural cadence)
+  // schedule next gap
   world.spawnDist = planNextSpawnDistance(world.speed, isTall);
 }
 
