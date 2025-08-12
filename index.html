@@ -2,15 +2,12 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta
-  name="viewport"
-  content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
-/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
 <title>Scooter Game</title>
 <style>
   :root { --app-vh: 100vh; }
 
-  body {
+  body{
     font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
     margin: 0;
     background: #f0f2f5;
@@ -19,15 +16,15 @@
     overflow: hidden;
   }
 
-  #gameContainer {
+  #gameContainer{
     position: relative;
     margin: 0 auto;
     display: grid;
     place-items: center;
-    height: 100vh;
+    height: 100vh; /* desktop fallback; mobile uses --app-vh */
   }
 
-  canvas {
+  canvas{
     background: #fff;
     border: 2px solid #000;
     border-radius: 10px;
@@ -39,17 +36,15 @@
   }
 
   /* Compact UI bar for Start/Restart */
-  #ui {
+  #ui{
     position: absolute;
-    top: 8px;
-    left: 50%;
+    top: 8px; left: 50%;
     transform: translateX(-50%);
     z-index: 5;
-    display: flex;
-    gap: 8px;
+    display: flex; gap: 8px;
     pointer-events: none;
   }
-  #ui button {
+  #ui button{
     pointer-events: auto;
     font-weight: 800;
     border-radius: 10px;
@@ -60,47 +55,39 @@
   }
 
   /* Game Over overlay with initials + Top 10 */
-  #scoreboard {
-    position: fixed;
-    inset: 0;
+  #scoreboard{
+    position: fixed; inset: 0;
     display: none;
-    align-items: center;
-    justify-content: center;
+    align-items: center; justify-content: center;
     background: rgba(255,255,255,.9);
     z-index: 10;
     overflow: auto;
     padding: 16px 0;
   }
-  .card {
-    background: #fff;
-    border-radius: 14px;
+  .card{
+    background: #fff; border-radius: 14px;
     box-shadow: 0 12px 36px rgba(0,0,0,.2);
     padding: 20px 24px;
     width: min(92vw, 520px);
   }
-  .row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 10px; }
-  .btn { background:#111; color:#fff; padding:10px 16px; border-radius:10px; font-weight:800; border:0; }
-  .muted { opacity: .7; }
-  input.initials {
-    width: 160px;
-    text-align: center;
-    font-size: 28px;
-    letter-spacing: 6px;
-    text-transform: uppercase;
-    border: 2px solid #111;
-    border-radius: 10px;
-    padding: 8px 10px;
-    outline: none;
+  .row{ display:flex; gap:10px; justify-content:center; flex-wrap:wrap; margin-top:10px; }
+  .btn{ background:#111; color:#fff; padding:10px 16px; border-radius:10px; font-weight:800; border:0; }
+  .muted{ opacity:.7; }
+  input.initials{
+    width:160px; text-align:center; font-size:28px; letter-spacing:6px; text-transform:uppercase;
+    border:2px solid #111; border-radius:10px; padding:8px 10px; outline:none;
   }
-  ol.lb { margin: 8px 0 0 20px; padding: 0; }
-  ol.lb li { display:flex; justify-content:space-between; font-weight:700; }
+  ol.lb{ margin:8px 0 0 20px; padding:0; }
+  ol.lb li{ display:flex; justify-content:space-between; font-weight:700; }
 
-  /* Make canvas fill the visible mobile height */
-  @media (max-width: 768px) {
-    #gameContainer { height: calc(var(--app-vh)); }
-    canvas {
+  /* Mobile: robust height with fallbacks so canvas never collapses */
+  @media (max-width: 768px){
+    #gameContainer{ height: var(--app-vh, 100vh); }
+    canvas{
       width: 100vw;
-      height: calc(var(--app-vh) - 20px);
+      /* Use the bigger of 60vh or real vh, minus a small padding */
+      height: calc( max(60vh, var(--app-vh, 100vh)) - 20px );
+      min-height: 300px;   /* absolute floor */
       max-height: 100vh;
       aspect-ratio: auto;
     }
@@ -147,35 +134,52 @@
 </div>
 
 <script>
-/* ---------- Mobile real viewport height (fix 100vh on iOS/Android) ---------- */
-function setAppVh() {
-  const vh = (window.visualViewport ? window.visualViewport.height : window.innerHeight);
-  document.documentElement.style.setProperty('--app-vh', vh + 'px');
+/* ================= Mobile real viewport height (robust) ================= */
+function setAppVhOnce(){
+  const vv = window.visualViewport;
+  const h = vv && vv.height ? vv.height : window.innerHeight || document.documentElement.clientHeight || 0;
+  if (h > 0) document.documentElement.style.setProperty('--app-vh', h + 'px');
 }
-setAppVh();
-addEventListener('resize', setAppVh);
-addEventListener('orientationchange', setAppVh);
-if (window.visualViewport) window.visualViewport.addEventListener('resize', setAppVh);
+function pumpVhUpdates(){
+  setAppVhOnce();
+  requestAnimationFrame(setAppVhOnce);
+  setTimeout(setAppVhOnce, 60);
+}
+pumpVhUpdates();
+addEventListener('resize', pumpVhUpdates, { passive:true });
+addEventListener('orientationchange', pumpVhUpdates, { passive:true });
+addEventListener('pageshow', pumpVhUpdates, { passive:true });
+if (window.visualViewport) window.visualViewport.addEventListener('resize', pumpVhUpdates, { passive:true });
 
-/* ---------- Canvas setup with DPR scaling ---------- */
+/* ================= Canvas + DPR scaling ================= */
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 function resizeCanvas(){
   const rect = canvas.getBoundingClientRect();
-  const cssW = Math.max(1, Math.floor(rect.width || window.innerWidth));
-  const cssH = Math.max(1, Math.floor(rect.height || window.innerHeight));
+  let cssW = Math.max(1, Math.floor(rect.width || window.innerWidth));
+  let cssH = Math.max(1, Math.floor(rect.height || window.innerHeight));
+
+  /* guard against iOS first-paint zeros */
+  if (cssH < 120) {
+    const vh = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--app-vh')) || window.innerHeight || 540;
+    cssH = Math.max(300, Math.floor(vh - 20));
+  }
+
   const DPR = Math.max(1, Math.floor(window.devicePixelRatio || 1));
-  canvas.width = cssW * DPR;
+  canvas.width  = cssW * DPR;
   canvas.height = cssH * DPR;
   ctx.setTransform(DPR,0,0,DPR,0,0);
   ctx.imageSmoothingEnabled = true;
+
   W = cssW; H = cssH; floorY = H * 0.78;
   if (player && player.y > floorY) player.y = floorY;
 }
-window.addEventListener('resize', resizeCanvas);
+addEventListener('load', () => { pumpVhUpdates(); resizeCanvas(); });
+addEventListener('pageshow', () => { pumpVhUpdates(); resizeCanvas(); });
+addEventListener('resize', resizeCanvas);
 if (window.visualViewport) window.visualViewport.addEventListener('resize', resizeCanvas);
 
-/* ---------- Game state ---------- */
+/* ================= Game state ================= */
 let W = 960, H = 540;
 let floorY = H * 0.78;
 
@@ -185,10 +189,10 @@ const world = {
   maxSpeed: 20,
   score: 0,
   alive: false,
-  spawnDist: 600,     // start gap
+  spawnDist: 600,     // first gap
   gapMin: 520,
   gapMax: 760,
-  rampK: 0.020        // speed increases by score only
+  rampK: 0.020        // difficulty by speed only
 };
 
 const player = { x: 120, y: floorY, vy: 0, w: 120, h: 80, onGround: true };
@@ -203,13 +207,13 @@ const BUFFER_FRAMES = 10;
 
 let coyote = 0, jumpBuffer = 0, usedDouble = false;
 
-/* ---------- Vespa sprite ---------- */
+/* ================= Vespa sprite ================= */
 const vespaImg = new Image();
 let vespaReady = false;
 vespaImg.onload = () => vespaReady = true;
-vespaImg.src = 'Blue Vespa Right.png'; // must exist next to index.html
+vespaImg.src = 'Blue Vespa Right.png'; // must exist next to this file
 
-/* ---------- UI refs ---------- */
+/* ================= UI refs ================= */
 const startBtn = document.getElementById('startBtn');
 const restartBtn = document.getElementById('restartBtn');
 
@@ -222,22 +226,21 @@ const goRestartBtn = document.getElementById('goRestartBtn');
 const lbEl = document.getElementById('lb');
 const lbSub = document.getElementById('lbSub');
 
-/* ---------- Leaderboard API ---------- */
+/* ================= Leaderboard API ================= */
 const API = 'https://scooter-game-api.vercel.app';
 async function getTop10(){
   try{
     const r = await fetch(`${API}/api/leaderboard`, { cache: 'no-store' });
     if(!r.ok) return [];
     return await r.json();
-  } catch { return []; }
+  }catch{ return []; }
 }
 async function saveScore(name, score){
   const r = await fetch(`${API}/api/leaderboard`, {
     method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({ name, score })
   });
-  const txt = await r.text();
-  let data = null; try{ data = txt ? JSON.parse(txt) : null; }catch{}
+  const txt = await r.text(); let data=null; try{ data = txt?JSON.parse(txt):null; }catch{}
   if(!r.ok) throw new Error(data?.error || txt || 'save failed');
   return data;
 }
@@ -252,7 +255,7 @@ function renderLB(list){
   lbSub.textContent = list.length ? 'Global leaderboard' : 'No scores yet — be the first!';
 }
 
-/* ---------- Game control ---------- */
+/* ================= Control ================= */
 function reset(){
   world.score = 0;
   world.speed = world.baseSpeed;
@@ -274,26 +277,23 @@ function endGame(){
   finalScoreEl.textContent = Math.floor(world.score);
   initialsEl.value = '';
   scoreboard.style.display = 'flex';
-  // Load Top 10 for the overlay
   lbSub.textContent = 'Loading…';
   getTop10().then(renderLB);
 }
 
-/* ---------- Input: keyboard ---------- */
+/* ================= Input ================= */
 document.addEventListener('keydown', (e)=>{
-  if(e.code === 'Space' || e.keyCode === 38){
+  if(e.code==='Space' || e.keyCode===38){
     e.preventDefault();
-    if (!world.alive) { startGame(); return; }
+    if(!world.alive){ startGame(); return; }
     jumpBuffer = BUFFER_FRAMES;
-  } else if(e.code === 'KeyR'){
+  }else if(e.code==='KeyR'){
     e.preventDefault();
     startGame();
   }
 });
-
-/* ---------- Input: tap (canvas only, don’t block overlay) ---------- */
 canvas.addEventListener('pointerdown', (e)=>{
-  if(e.pointerType === 'mouse') return;
+  if(e.pointerType==='mouse') return;
   if(!world.alive){ e.preventDefault(); startGame(); return; }
   e.preventDefault(); jumpBuffer = BUFFER_FRAMES;
 }, { passive:false });
@@ -302,48 +302,37 @@ canvas.addEventListener('touchstart', (e)=>{
   e.preventDefault(); jumpBuffer = BUFFER_FRAMES;
 }, { passive:false });
 
-/* ---------- Start/Restart buttons: click + pointer + touch ---------- */
 function startFromUI(e){ if(e) e.preventDefault(); startGame(); }
 function restartFromUI(e){ if(e) e.preventDefault(); startGame(); }
-
 startBtn.addEventListener('click', startFromUI);
 startBtn.addEventListener('pointerdown', startFromUI, { passive:false });
 startBtn.addEventListener('touchstart', startFromUI, { passive:false });
-
 restartBtn.addEventListener('click', restartFromUI);
 restartBtn.addEventListener('pointerdown', restartFromUI, { passive:false });
 restartBtn.addEventListener('touchstart', restartFromUI, { passive:false });
-
 goRestartBtn.addEventListener('click', restartFromUI);
 goRestartBtn.addEventListener('pointerdown', restartFromUI, { passive:false });
 goRestartBtn.addEventListener('touchstart', restartFromUI, { passive:false });
 
-/* ---------- Initials input constraints ---------- */
+/* Initials constraints + save/skip */
 function sanitizeInitials(s){ return (s||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,3); }
 initialsEl.addEventListener('input', ()=>{
   const clean = sanitizeInitials(initialsEl.value);
   if(initialsEl.value !== clean) initialsEl.value = clean;
 });
-
-/* ---------- Save / Skip ---------- */
 submitBtn.addEventListener('click', async ()=>{
   const name = sanitizeInitials(initialsEl.value);
-  if(!name) { scoreboard.style.display='none'; return; }
+  if(!name){ scoreboard.style.display='none'; return; }
   try{
-    submitBtn.textContent = 'Saving…';
-    submitBtn.disabled = true;
+    submitBtn.textContent='Saving…'; submitBtn.disabled=true;
     await saveScore(name, Math.floor(world.score));
     const lb = await getTop10(); renderLB(lb);
-  }catch(err){
-    alert('Save failed: ' + (err.message || err));
-  }finally{
-    submitBtn.textContent = 'Save';
-    submitBtn.disabled = false;
-  }
+  }catch(err){ alert('Save failed: ' + (err.message||err)); }
+  finally{ submitBtn.textContent='Save'; submitBtn.disabled=false; }
 });
 skipBtn.addEventListener('click', ()=>{ scoreboard.style.display='none'; });
 
-/* ---------- Spawning & gameplay ---------- */
+/* ================= Spawning & helpers ================= */
 function randInt(a,b){ return (a + Math.random()*(b-a))|0; }
 function planNextSpawn(){ world.spawnDist = randInt(world.gapMin, world.gapMax); }
 function spawnTriangle(){
@@ -353,52 +342,42 @@ function spawnTriangle(){
   obstacles.push({ x: W + 40, y: floorY, base, height: high, color });
 }
 
-// y-coordinate of the triangle's top edge at a given x (isosceles pointing up)
-function triTopY(tri, x){
-  const x0 = tri.x;
-  const x2 = tri.x + tri.base;
-  if (x <= x0 || x >= x2) return Infinity; // outside triangle horizontally
-  const xc = (x0 + x2) * 0.5;
-  const dx = Math.abs(x - xc);
-  const t = 1 - (dx / (tri.base * 0.5)); // 0 at edges -> 1 at center
-  return tri.y - tri.height * Math.max(0, Math.min(1, t));
-}
-
-// Rect vs triangle (samples the front/bottom of the Vespa hitbox against the sloped top)
-function rectHitsTriangle(rect, tri){
-  // quick horizontal reject
-  if (rect.x + rect.w <= tri.x || rect.x >= tri.x + tri.base) return false;
-
-  // sample a few x positions near the Vespa's front/bottom edge
-  const xFront = Math.min(rect.x + rect.w, tri.x + tri.base - 0.5);
-  const xMid   = Math.max(rect.x + rect.w - 10, rect.x + rect.w * 0.5);
-  const xBack  = Math.max(rect.x + 6, rect.x);
-
-  const yTopF = triTopY(tri, xFront);
-  const yTopM = triTopY(tri, xMid);
-  const yTopB = triTopY(tri, xBack);
-
-  const yBottom = rect.y + rect.h;
-
-  // Collision only if the Vespa's bottom actually crosses the triangle's top line
-  return (yBottom > yTopF) || (yBottom > yTopM) || (yBottom > yTopB);
-}
-// Tighter Vespa hitbox: ~76% width, ~78% height, lifted slightly
+/* ===== Collision helpers: tighter Vespa + triangle-aware check ===== */
 function getPlayerBounds(){
+  // ~76% width, ~78% height, lifted slightly so wheels/air don’t count
   const w = player.w * 0.76;
   const h = player.h * 0.78;
   const x = player.x - w/2;
-  const y = (player.y - player.h) + (player.h - h) - 4; // lift a hair so wheels don't count
+  const y = (player.y - player.h) + (player.h - h) - 4;
   return { x, y, w, h };
 }
-function rectsOverlap(a,b){ return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y; }
+function triTopY(tri, x){
+  const x0 = tri.x, x2 = tri.x + tri.base;
+  if (x <= x0 || x >= x2) return Infinity;
+  const xc = (x0 + x2) * 0.5;
+  const dx = Math.abs(x - xc);
+  const t = 1 - (dx / (tri.base * 0.5)); // 0 at edges -> 1 center
+  return tri.y - tri.height * Math.max(0, Math.min(1, t));
+}
+function rectHitsTriangle(rect, tri){
+  if (rect.x + rect.w <= tri.x || rect.x >= tri.x + tri.base) return false;
+  const xFront = Math.min(rect.x + rect.w, tri.x + tri.base - 0.5);
+  const xMid   = Math.max(rect.x + rect.w - 10, rect.x + rect.w * 0.5);
+  const xBack  = Math.max(rect.x + 6, rect.x);
+  const yTopF = triTopY(tri, xFront);
+  const yTopM = triTopY(tri, xMid);
+  const yTopB = triTopY(tri, xBack);
+  const yBottom = rect.y + rect.h;
+  return (yBottom > yTopF) || (yBottom > yTopM) || (yBottom > yTopB);
+}
 
+/* ================= Game loop ================= */
 function update(){
-  // Speed ramp (difficulty) only by score
+  // Difficulty by speed only
   world.speed = Math.min(world.maxSpeed, world.baseSpeed + world.score * world.rampK);
 
   if(world.alive){
-    // Coyote + buffered jump + double jump
+    // Jump logic (coyote + buffer + double)
     if(player.onGround) coyote = COYOTE_FRAMES; else if(coyote>0) coyote--;
     if(jumpBuffer>0) jumpBuffer--;
     if(jumpBuffer>0 && (player.onGround || coyote>0)){
@@ -409,33 +388,29 @@ function update(){
 
     // Gravity
     player.vy += gravity; player.y += player.vy;
-    if(player.y >= floorY){ player.y = floorY; player.vy = 0; if(!player.onGround){ player.onGround=true; usedDouble=false; } }
-    else { player.onGround = false; }
+    if(player.y >= floorY){ player.y=floorY; player.vy=0; if(!player.onGround){ player.onGround=true; usedDouble=false; } }
+    else { player.onGround=false; }
 
     // Move obstacles
     for(let i=obstacles.length-1;i>=0;i--){
       const o = obstacles[i]; o.x -= world.speed; if(o.x + o.base < -120) obstacles.splice(i,1);
     }
 
-    // Distance-based spawn (single triangle per cycle)
+    // Spawn: single triangle per cycle; spacing via distance
     world.spawnDist -= world.speed;
     if(world.spawnDist <= 0){ spawnTriangle(); planNextSpawn(); }
 
-    // Score over time (slightly boosted by speed)
+    // Score over time
     world.score += 0.24 + world.speed*0.013;
 
-// Collision (triangle-aware)
-const pb = getPlayerBounds();
-for (const o of obstacles) {
-  // fast bbox test first
-  const ob = { x:o.x, y:o.y - o.height, w:o.base, h:o.height };
-  const bboxOverlap = pb.x < ob.x + ob.w && pb.x + pb.w > ob.x &&
-                      pb.y < ob.y + ob.h && pb.y + pb.h > ob.y;
-  if (bboxOverlap && rectHitsTriangle(pb, o)) {
-    endGame();
-    break;
+    // Collision
+    const pb = getPlayerBounds();
+    for(const o of obstacles){
+      const ob = { x:o.x, y:o.y - o.height, w:o.base, h:o.height };
+      const bboxOverlap = pb.x < ob.x + ob.w && pb.x + pb.w > ob.x && pb.y < ob.y + ob.h && pb.y + pb.h > ob.y;
+      if (bboxOverlap && rectHitsTriangle(pb, o)) { endGame(); break; }
+    }
   }
-}
 
   draw();
   requestAnimationFrame(update);
@@ -444,13 +419,11 @@ for (const o of obstacles) {
 function draw(){
   ctx.clearRect(0,0,canvas.width,canvas.height);
 
-  // Background sky
-  ctx.fillStyle = '#a6d4ff';
-  ctx.fillRect(0, 0, W, H);
+  // Sky
+  ctx.fillStyle = '#a6d4ff'; ctx.fillRect(0,0,W,H);
 
   // Road
-  ctx.fillStyle = '#2a2a2a';
-  ctx.fillRect(0, floorY, W, H - floorY);
+  ctx.fillStyle = '#2a2a2a'; ctx.fillRect(0, floorY, W, H-floorY);
   ctx.fillStyle = 'rgba(255,255,255,.25)';
   const stripeW=120, stripeH=6, phase=(world.score*0.5)%(stripeW*2);
   for(let x=-phase; x<W; x+=stripeW*2){
@@ -461,21 +434,19 @@ function draw(){
 
   // Obstacles (triangles)
   for(const o of obstacles){
-    ctx.fillStyle = o.color; ctx.beginPath();
+    ctx.fillStyle=o.color; ctx.beginPath();
     const x0=Math.round(o.x), y0=Math.round(o.y);
     const x1=Math.round(o.x + o.base/2), y1=Math.round(o.y - o.height);
     const x2=Math.round(o.x + o.base);
     ctx.moveTo(x0,y0); ctx.lineTo(x1,y1); ctx.lineTo(x2,y0); ctx.closePath(); ctx.fill();
   }
 
-  // Player: draw Vespa PNG (fallback to blue rect if not loaded yet)
+  // Vespa sprite (fallback to rect while loading)
   if (vespaReady) {
-    ctx.drawImage(
-      vespaImg,
+    ctx.drawImage(vespaImg,
       Math.round(player.x - player.w/2),
       Math.round(player.y - player.h),
-      player.w,
-      player.h
+      player.w, player.h
     );
   } else {
     ctx.fillStyle = '#1e8bff';
@@ -483,18 +454,15 @@ function draw(){
   }
 
   // Shadow
-  ctx.fillStyle = 'rgba(0,0,0,.16)';
-  ctx.beginPath();
-  ctx.ellipse(player.x, player.y-2, player.w*0.44, 8, 0, 0, Math.PI*2);
-  ctx.fill();
+  ctx.fillStyle='rgba(0,0,0,.16)';
+  ctx.beginPath(); ctx.ellipse(player.x, player.y-2, player.w*0.44, 8, 0, 0, Math.PI*2); ctx.fill();
 
-  // HUD (score)
-  ctx.fillStyle = '#111';
-  ctx.font = '16px system-ui, sans-serif';
+  // HUD
+  ctx.fillStyle='#111'; ctx.font='16px system-ui, sans-serif';
   ctx.fillText(`Score: ${Math.floor(world.score)}`, 12, 22);
 }
 
-/* ---------- Kickoff ---------- */
+/* ================= Kickoff ================= */
 resizeCanvas();
 requestAnimationFrame(update);
 </script>
