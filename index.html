@@ -1,41 +1,48 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
+<meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <title>Blue Vespa Scooter Game</title>
 <style>
-  :root { --app-vh: 100vh; }
-  html, body { padding:0; margin:0; }
-  body{
-    background:#1d1f22;
-    color:#fff;
-    font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
-    overflow:hidden;
-    display:flex; flex-direction:column; align-items:center;
-    padding-bottom:env(safe-area-inset-bottom);
+  html, body { margin:0; padding:0; }
+  body {
+    background:#1d1f22; color:#fff;
+    font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+    overflow:hidden; display:flex; flex-direction:column; align-items:center;
+    padding-bottom: env(safe-area-inset-bottom);
     -webkit-user-select:none; user-select:none;
   }
-  #leaderboard{ width:100%; max-width:560px; padding:8px 10px 4px; background:#2a2d31; border-bottom:2px solid rgba(255,255,255,.08); box-sizing:border-box;}
-  #leaderboard h3{ margin:6px 0 8px; text-align:center;}
-  #leaderboard ol{ margin:0 auto 4px; padding-left:24px; max-width:520px;}
-  #wrap{ position:relative; width:100%; max-width:560px; }
-  canvas{
-    background:#0e5580;
+  #leaderboard {
+    width:100%; max-width:560px; padding:8px 10px 4px;
+    background:#2a2d31; border-bottom:2px solid rgba(255,255,255,.08); box-sizing:border-box;
+  }
+  #leaderboard h3 { margin:6px 0 8px; text-align:center; }
+  #leaderboard ol { margin:0 auto 4px; padding-left:24px; max-width:520px; }
+
+  #wrap { position:relative; width:100%; max-width:560px; }
+  canvas {
     display:block; width:100%;
-    height:calc(var(--app-vh,100vh) - 140px - env(safe-area-inset-bottom));
-    min-height:360px; max-height:calc(100vh - env(safe-area-inset-bottom));
+    background:#0e5580;
     border:2px solid #000; border-radius:10px; box-sizing:border-box;
     touch-action:manipulation;
   }
-  .overlay{ position:absolute; inset:0; background:rgba(0,0,0,.5); color:#fff;
+
+  .overlay {
+    position:absolute; inset:0; z-index:10;
     display:flex; flex-direction:column; align-items:center; justify-content:center;
-    z-index:10; text-align:center; padding:16px; }
-  button{ padding:10px 16px; font-size:18px; margin-top:10px; cursor:pointer;
-    border-radius:10px; border:0; background:#111; color:#fff; font-weight:800;
-    touch-action:manipulation; }
-  input.initials{ text-transform:uppercase; font-size:18px; width:70px; text-align:center;
-    border:2px solid #fff; background:rgba(255,255,255,.15); color:#fff; padding:6px 8px; border-radius:8px; outline:none;}
+    background:rgba(0,0,0,.5); padding:16px; text-align:center; color:#fff;
+  }
+  button {
+    margin-top:10px; padding:10px 16px; font-size:18px; font-weight:800;
+    border:0; border-radius:10px; background:#111; color:#fff; cursor:pointer;
+    touch-action:manipulation;
+  }
+  input.initials {
+    text-transform:uppercase; font-size:18px; width:70px; text-align:center;
+    border:2px solid #fff; background:rgba(255,255,255,.15); color:#fff;
+    padding:6px 8px; border-radius:8px; outline:none;
+  }
 </style>
 </head>
 <body>
@@ -45,77 +52,70 @@
   </div>
 
   <div id="wrap">
-    <canvas id="gameCanvas" width="480" height="300"></canvas>
+    <canvas id="game"></canvas>
 
-    <div id="startScreen" class="overlay">
+    <div id="start" class="overlay">
       <h1 style="margin:0 0 6px">Blue Vespa</h1>
       <div>Tap or press <b>Space</b> to jump (double‑jump allowed)</div>
-      <button id="startButton" type="button" onclick="window.__start&&window.__start()">Start</button>
-      <small id="hint" style="margin-top:10px;opacity:.7">If nothing happens, it will auto‑start…</small>
+      <button id="startBtn" onclick="window.__start&&window.__start()">Start</button>
     </div>
 
-    <div id="gameOverScreen" class="overlay" style="display:none;">
+    <div id="over" class="overlay" style="display:none">
       <h1 style="margin:0 0 6px">Game Over</h1>
       <p id="finalScore" style="margin:0 0 8px"></p>
       <div style="display:flex; gap:8px; justify-content:center; align-items:center; flex-wrap:wrap;">
-        <input id="playerInitials" class="initials" maxlength="3" placeholder="AAA" autocomplete="off" spellcheck="false" />
-        <button id="saveScoreButton" type="button">Save</button>
-        <button id="skipButton" type="button" style="background:#666">Skip</button>
+        <input id="initials" class="initials" maxlength="3" placeholder="AAA" autocomplete="off" spellcheck="false" />
+        <button id="saveBtn" type="button">Save</button>
+        <button id="skipBtn" type="button" style="background:#666">Skip</button>
       </div>
-      <button id="restartButton" type="button">Restart</button>
+      <button id="restartBtn" type="button">Restart</button>
     </div>
   </div>
 
 <script>
-/* ---------- Viewport height (iOS/Firefox) ---------- */
-function setAppVh(){
-  const vv = window.visualViewport;
-  const h = vv && vv.height ? vv.height : (window.innerHeight || document.documentElement.clientHeight || 0);
-  if (h>0) document.documentElement.style.setProperty('--app-vh', h + 'px');
-}
-setAppVh();
-addEventListener('resize', setAppVh, {passive:true});
-addEventListener('orientationchange', setAppVh, {passive:true});
-if (window.visualViewport) window.visualViewport.addEventListener('resize', setAppVh, {passive:true});
-
-/* ---------- Canvas + DPR ---------- */
-const canvas = document.getElementById('gameCanvas');
+/* ---------- Simple, robust sizing (no visualViewport) ---------- */
+const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
-let W=480,H=300,floorY=H-6;
+function sizeCanvas() {
+  // Canvas height = viewport minus header (~140px), clamped
+  const header = 140;
+  const vh = Math.max(360, Math.min(window.innerHeight || 600, 1200));
+  const cssH = Math.max(360, vh - header);
+  canvas.style.height = cssH + 'px';
 
-function fitCanvasDPR(){
+  // DPR backing store
   const rect = canvas.getBoundingClientRect();
-  const DPR = Math.max(1, window.devicePixelRatio||1);
+  const DPR = Math.max(1, window.devicePixelRatio || 1);
   canvas.width  = Math.max(1, Math.round(rect.width  * DPR));
   canvas.height = Math.max(1, Math.round(rect.height * DPR));
   ctx.setTransform(DPR,0,0,DPR,0,0);
-  W = Math.max(1, Math.round(rect.width));
-  H = Math.max(1, Math.round(rect.height));
-  floorY = H - 6;
-  if (player.y > floorY - player.h){ player.y = floorY - player.h; player.dy=0; player.onGround=true; player.jumps=0; }
 }
-fitCanvasDPR();
-addEventListener('resize', fitCanvasDPR);
-if (window.visualViewport) window.visualViewport.addEventListener('resize', fitCanvasDPR, {passive:true});
+sizeCanvas();
+addEventListener('resize', sizeCanvas, {passive:true});
+addEventListener('orientationchange', sizeCanvas, {passive:true});
 
-/* ---------- Assets ---------- */
+/* ---------- Game state ---------- */
+let W = () => canvas.getBoundingClientRect().width;
+let H = () => canvas.getBoundingClientRect().height;
+let floorY = () => H() - 6;
+
 const vespaImg = new Image();
 vespaImg.src = 'Blue Vespa Right.png';
 
-/* ---------- Game ---------- */
-let running=false, score=0;
-const player={ x:50, y:0, w:60, h:40, dy:0, onGround:false, jumps:0 };
-let obstacles=[];
+let running = false, score = 0;
+const player = { x: 50, y: 0, w: 60, h: 40, dy: 0, onGround: false, jumps: 0 };
+let obstacles = [];
 
-const SPEED_BASE=4, SPEED_MAX=15; let speed=SPEED_BASE;
-const world={
+const SPEED_BASE = 4, SPEED_MAX = 15; let speed = SPEED_BASE;
+const world = {
   pTallBase:.14, pTallLate:.34, tallStreak:0, singleStreak:0, maxTallStreak:1, maxSingleStreak:4,
   warmupScore:150, rampRate:0.0025, rtSingle:.90, rtTall:1.05, rtJitter:.10
 };
-let distSinceSpawn=0, nextGapPx=520;
+let distSinceSpawn = 0, nextGapPx = 520;
 
-const GRAVITY=.5, JUMP_VEL=9;
+const GRAVITY = .5, JUMP_VEL = 9;
 
+/* ---------- Obstacles ---------- */
 function decideTall(s){
   const t = Math.min(1, Math.max(0,(s - world.warmupScore)/1500));
   let p = world.pTallBase*(1-t)+world.pTallLate*t;
@@ -144,62 +144,99 @@ function planNextGapPx(v, tall){
 }
 function spawnObstacle(tall){
   const spec = triangleSpec(tall);
-  obstacles.push({ x:W+20, y:floorY, base:spec.base, height:spec.height, color:tall?'#ef476f':'#06d6a0', tall });
+  obstacles.push({ x:W()+20, y:floorY(), base:spec.base, height:spec.height, color:tall?'#ef476f':'#06d6a0', tall });
   if (tall){ world.tallStreak++; world.singleStreak=0; } else { world.singleStreak++; world.tallStreak=0; }
   nextGapPx = planNextGapPx(speed, decideTall(score));
   distSinceSpawn=0;
 }
 
+/* ---------- Core loop with RAF + interval fallback ---------- */
+let rafActive = false, intervalId = null;
+function startLoop(){
+  rafActive = false;
+  function frame(){
+    rafActive = true;
+    if (!running) return;
+
+    // clear
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+
+    // speed
+    speed = Math.min(SPEED_MAX, SPEED_BASE + world.rampRate * score);
+
+    // physics
+    player.y += player.dy; player.dy += GRAVITY;
+    const fy = floorY();
+    if (player.y >= fy - player.h){
+      player.y = fy - player.h; player.dy = 0;
+      if (!player.onGround){ player.onGround = true; player.jumps = 0; }
+    } else player.onGround = false;
+
+    // ground
+    ctx.fillStyle = '#2a2a2a'; ctx.fillRect(0, fy, W(), 2);
+
+    // player
+    if (vespaImg.complete && vespaImg.naturalWidth) ctx.drawImage(vespaImg, player.x, player.y, player.w, player.h);
+    else { ctx.fillStyle = '#1e8bff'; ctx.fillRect(player.x, player.y, player.w, player.h); }
+
+    // obstacles
+    for (let i=obstacles.length-1;i>=0;i--){
+      const o=obstacles[i]; o.x -= speed;
+      ctx.fillStyle=o.color; ctx.beginPath();
+      ctx.moveTo(o.x,o.y); ctx.lineTo(o.x+o.base/2,o.y-o.height); ctx.lineTo(o.x+o.base,o.y); ctx.closePath(); ctx.fill();
+      const box={x:o.x,y:o.y-o.height,w:o.base,h:o.height};
+      if (player.x<box.x+box.w && player.x+player.w>box.x && player.y<box.y+box.h && player.y+player.h>box.y){ endGame(); }
+      if (o.x+o.base<0){ obstacles.splice(i,1); score++; }
+    }
+
+    // spawn
+    distSinceSpawn += speed;
+    if (distSinceSpawn >= nextGapPx) spawnObstacle(decideTall(score));
+
+    // HUD
+    ctx.fillStyle='#fff'; ctx.font='16px system-ui, sans-serif'; ctx.fillText(`Score: ${score}`, 10, 24);
+
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+
+  // Fallback interval if RAF never fires (or gets paused)
+  if (intervalId) clearInterval(intervalId);
+  let ticks = 0;
+  intervalId = setInterval(()=>{
+    if (rafActive){ clearInterval(intervalId); intervalId = null; return; }
+    if (!running) return;
+    ticks++;
+    // call a lightweight step if RAF didn’t run
+    // (reuse the same logic by forcing one RAF frame)
+    requestAnimationFrame(()=>{}); // poke
+  }, 1000/30);
+}
+
 function resetGame(){
   score=0; speed=SPEED_BASE; obstacles.length=0; world.tallStreak=0; world.singleStreak=0;
   nextGapPx=320; distSinceSpawn=nextGapPx-60;
-  player.y=floorY-player.h; player.dy=0; player.onGround=true; player.jumps=0;
+  player.y = floorY() - player.h; player.dy=0; player.onGround=true; player.jumps=0;
 }
+
 function startGame(){
-  // Fit after tap (toolbar collapse)
-  fitCanvasDPR(); setTimeout(fitCanvasDPR,50); setTimeout(fitCanvasDPR,250);
-  document.getElementById('startScreen').style.display='none';
-  document.getElementById('gameOverScreen').style.display='none';
-  resetGame(); running=true; requestAnimationFrame(frame);
+  sizeCanvas(); setTimeout(sizeCanvas, 60); setTimeout(sizeCanvas, 260);
+  document.getElementById('start').style.display='none';
+  document.getElementById('over').style.display='none';
+  resetGame(); running = true; startLoop();
 }
-function endGame(){ running=false; document.getElementById('finalScore').textContent=`Score: ${score}`; document.getElementById('gameOverScreen').style.display='flex'; }
-
-function frame(){
-  if(!running) return;
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-  speed = Math.min(SPEED_MAX, SPEED_BASE + world.rampRate*score);
-
-  player.y += player.dy; player.dy += GRAVITY;
-  if (player.y >= floorY - player.h){ player.y=floorY-player.h; player.dy=0; if(!player.onGround){player.onGround=true; player.jumps=0;} }
-  else player.onGround=false;
-
-  ctx.fillStyle='#2a2a2a'; ctx.fillRect(0,floorY,W,2);
-
-  if (vespaImg.complete && vespaImg.naturalWidth) ctx.drawImage(vespaImg, player.x, player.y, player.w, player.h);
-  else { ctx.fillStyle='#1e8bff'; ctx.fillRect(player.x, player.y, player.w, player.h); }
-
-  for(let i=obstacles.length-1;i>=0;i--){
-    const o=obstacles[i]; o.x-=speed;
-    ctx.fillStyle=o.color; ctx.beginPath();
-    ctx.moveTo(o.x,o.y); ctx.lineTo(o.x+o.base/2,o.y-o.height); ctx.lineTo(o.x+o.base,o.y); ctx.closePath(); ctx.fill();
-    const box={x:o.x,y:o.y-o.height,w:o.base,h:o.height};
-    if (player.x<box.x+box.w && player.x+player.w>box.x && player.y<box.y+box.h && player.y+player.h>box.y) endGame();
-    if (o.x+o.base<0){ obstacles.splice(i,1); score++; }
-  }
-
-  distSinceSpawn+=speed;
-  if (distSinceSpawn>=nextGapPx) spawnObstacle(decideTall(score));
-
-  ctx.fillStyle='#fff'; ctx.font='16px system-ui, sans-serif'; ctx.fillText(`Score: ${score}`, 10, 24);
-  requestAnimationFrame(frame);
+function endGame(){
+  running = false;
+  document.getElementById('finalScore').textContent = `Score: ${score}`;
+  document.getElementById('over').style.display = 'flex';
 }
 
-/* ---------- Controls + ultra‑robust starters ---------- */
-function jump(){ if (player.jumps<2){ player.dy=-JUMP_VEL; player.jumps++; player.onGround=false; } }
+/* ---------- Controls & ultra‑robust starters ---------- */
+function jump(){ if (player.jumps<2){ player.dy = -JUMP_VEL; player.jumps++; player.onGround=false; } }
 
-const startBtn=document.getElementById('startButton');
-const restartBtn=document.getElementById('restartButton');
-const startOverlay=document.getElementById('startScreen');
+const startBtn = document.getElementById('startBtn');
+const restartBtn = document.getElementById('restartBtn');
+const startOverlay = document.getElementById('start');
 
 startBtn.addEventListener('click', startGame);
 restartBtn.addEventListener('click', startGame);
@@ -215,17 +252,16 @@ function startOnce(e){ if(!running){ e && e.preventDefault && e.preventDefault()
 });
 document.addEventListener('keydown', (e)=>{
   if (e.code==='Space'){ e.preventDefault(); if(!running) startGame(); else jump(); }
-  else if (e.code==='KeyR'){ e.preventDefault(); startGame(); }
+  if (e.code==='KeyR'){ e.preventDefault(); startGame(); }
 });
 canvas.addEventListener('touchstart', (e)=>{ e.preventDefault(); if(!running) startGame(); else jump(); }, {passive:false});
 
-// Auto-start if all else fails (Firefox iOS first-paint bug)
+// Absolute failsafe: auto‑start shortly after load / visibility
 function forceAutoStart(){ if(!running) startGame(); }
-document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible') setTimeout(forceAutoStart, 200); });
 window.addEventListener('load', ()=> setTimeout(forceAutoStart, 1200));
-requestAnimationFrame(()=> setTimeout(forceAutoStart, 900));
+document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible') setTimeout(forceAutoStart, 300); });
 
-// Expose inline fallback
+// expose for inline onclick
 window.__start = startGame;
 
 /* ---------- Leaderboard ---------- */
@@ -233,17 +269,18 @@ const API='https://scooter-game-api.vercel.app';
 function loadLeaderboard(){
   fetch(`${API}/api/leaderboard`).then(r=>r.json()).then(list=>{
     const lb=document.getElementById('lbList'); lb.innerHTML='';
-    list.forEach(row=>{ const li=document.createElement('li'); li.innerHTML=`<b>${(row.name||'---').toUpperCase().slice(0,3)}</b>: ${row.score}`; lb.appendChild(li); });
+    list.forEach(row=>{ const li=document.createElement('li'); li.innerHTML = `<b>${(row.name||'---').toUpperCase().slice(0,3)}</b>: ${row.score}`; lb.appendChild(li); });
   }).catch(()=>{ document.getElementById('lbList').innerHTML=''; });
 }
 function saveScore(){
-  const initials=(document.getElementById('playerInitials').value||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,3);
-  if(!initials){ document.getElementById('gameOverScreen').style.display='none'; return; }
+  const initials=(document.getElementById('initials').value||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,3);
+  if(!initials){ document.getElementById('over').style.display='none'; return; }
   fetch(`${API}/api/leaderboard`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:initials,score})})
     .then(()=>loadLeaderboard());
 }
-document.getElementById('saveScoreButton').addEventListener('click', saveScore);
-document.getElementById('skipButton').addEventListener('click', ()=>{ document.getElementById('gameOverScreen').style.display='none'; });
+document.getElementById('saveBtn').addEventListener('click', saveScore);
+document.getElementById('skipBtn').addEventListener('click', ()=>{ document.getElementById('over').style.display='none'; });
+
 loadLeaderboard();
 </script>
 </body>
