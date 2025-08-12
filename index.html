@@ -27,12 +27,25 @@
   body { -webkit-tap-highlight-color: transparent; }
 
   /* ——— Mobile layout: hide top bar during play to push canvas up ——— */
-  @media (max-width: 768px){
-    #page{grid-template-rows:0 1fr;} /* collapse the board row */
-    .board{display:none;}            /* hide global board while playing */
-    canvas{width:100vw;height:auto;max-width:960px;aspect-ratio:16/9;}
-    .card{padding:18px}
+@media (max-width: 768px){
+  #page{grid-template-rows:0 1fr;}
+  .board{display:none;}
+  canvas{
+    width:100vw;
+    height: calc(100vh - 20px); /* fit window height */
+    max-width:100%;
+    max-height:100%;
+    aspect-ratio:auto; /* allow flexible ratio */
   }
+  .overlay{
+    align-items:flex-start; /* allow scroll on small screens */
+    overflow:auto;
+    padding:20px 0;
+  }
+  .card{
+    margin:auto;
+  }
+}
 </style>
 </head>
 <body>
