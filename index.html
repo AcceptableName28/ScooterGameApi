@@ -182,7 +182,7 @@ function randMid(){
 function triangleSpec(tall){
   const ramp=Math.min(1, Math.max(0, score/1200));
   const smallMin=28, smallMax=42;
-  const tallMin=42+(50-42)*ramp, tallMax=150+(74-150)*ramp;
+  const tallMin=42+(50-42)*ramp, tallMax=250+(74-250)*ramp;
   const h=tall ? (tallMin + randMid() * (tallMax - tallMin)) : (smallMin + randMid() * (smallMax - smallMin));
   const base=h*0.9+Math.random()*8;
   return {base, height:h};
