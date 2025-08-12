@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Vespa Jump</title>
+<style>
+  :root { --sky:#cfe9ff; --road:#2a2a2a; --ink:#111; }
+  html,body{height:100%;margin:0;background:var(--sky);font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+  #page{display:grid;grid-template-rows:auto 1fr;min-height:100vh}
+  .board{padding:10px 14px 0 14px}
+  .board h2{margin:8px 0 6px 0;font-size:16px}
+  .board ol{margin:0;padding-left:20px;display:grid;gap:2px;max-width:960px}
+  .board li{font-weight:700;color:var(--ink);display:flex;justify-content:space-between}
+  .board .muted{opacity:.65;font-weight:600}
+  #wrap{display:grid;place-items:center}
+  canvas{background:linear-gradient(#cfe9ff,#a6d4ff 60%);box-shadow:0 10px 40px rgba(0,0,0,.25);border-radius:14px;width:960px;height:540px}
+  .overlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.85);text-align:center;z-index:10}
+  .card{background:#fff;border-radius:14px;box-shadow:0 12px 36px rgba(0,0,0,.2);padding:20px 28px;min-width:320px}
+  .btn{display:inline-block;background:#111;color:#fff;padding:10px 16px;border-radius:10px;font-weight:800;margin-top:10px;text-decoration:none}
+  kbd{background:#111;color:#fff;border-radius:6px;padding:3px 6px;font-weight:700}
+  .row{display:flex;gap:10px;justify-content:center;margin-top:10px}
+  .field{display:flex;justify-content:center;gap:8px;margin-top:10px}
+  input.initials{font-size:28px;text-transform:uppercase;letter-spacing:6px;width:140px;text-align:center;
+    padding:8px 10px;border:2px solid #111;border-radius:10px;outline:none}
+  .hint{font-size:12px;color:#444;margin-top:6px}
+</style>
+</head>
+<body>
+<div id="page">
+  <div class="board">
+    <h2>🏁 Top 10 Scores</h2>
+    <ol id="lb"></ol>
+    <div class="muted" id="lbSub">Loading…</div>
+  </div>
+
+  <div id="wrap">
+    <canvas id="game" width="960" height="540" aria-label="Vespa Jump game"></canvas>
+  </div>
+</div>
+
+<div id="startScreen" class="overlay">
+  <div class="card">
+    <h1 style="margin:0 0 8px">🛵 Vespa Jump</h1>
+    <div>Press <kbd>Space</kbd> or <kbd>↑</kbd> to jump. Press again mid-air for a double jump.<br/>After a crash, press <kbd>R</kbd> or click Restart.</div>
+    <a href="#" id="startBtn" class="btn">Start</a>
+  </div>
+</div>
+
+<div id="gameOver" class="overlay" style="display:none">
+  <div class="card">
+    <h2 style="margin:0 0 8px">Game Over</h2>
+    <div>Score: <span id="finalScore">0</span> · Best: <span id="finalBest">0</span></div>
+    <div id="qualifyBox" style="display:none">
+      <div class="field">
+        <input id="initials" class="initials" maxlength="3" placeholder="AAA" autocomplete="off" spellcheck="false">
+      </div>
+      <div class="hint">Enter 3 letters/numbers · Only A–Z / 0–9</div>
+      <div class="row">
+        <a href="#" id="saveScoreBtn" class="btn">Save</a>
+        <a href="#" id="skipBtn" class="btn" style="background:#666">Skip</a>
+      </div>
+    </div>
+    <div class="row" id="restartRow">
+      <a href="#" id="restartBtn" class="btn">Restart (R)</a>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ===== Use same-origin API (this project’s /api) ===== */
+const API_BASE = ''; // same domain
+async function apiGetTop10(){
+  try{ const r = await fetch(`${API_BASE}/api/leaderboard`, { cache: 'no-store' }); return r.ok ? r.json() : []; }
+  catch{ return []; }
+}
+async function apiSaveScore(name, score){
+  const r = await fetch(`${API_BASE}/api/leaderboard`, {
+    method:'POST', headers:{ 'Content-Type':'application/json' },
+    body: JSON.stringify({ name, score })
+  });
+  const text = await r.text(); let data=null; try{ data = text?JSON.parse(text):null; }catch{}
+  if(!r.ok) throw new Error(data?.error || text || 'save failed');
+  return data;
+}
+
+/* ===== HiDPI canvas ===== */
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d', { alpha:true });
+let DPR = Math.max(1, Math.floor(window.devicePixelRatio || 1));
+function resizeCanvas(){ DPR=Math.max(1,Math.floor(window.devicePixelRatio||1)); const cssW=960,cssH=540; canvas.style.width=cssW+'px'; canvas.style.height=cssH+'px'; canvas.width=cssW*DPR; canvas.height=cssH*DPR; ctx.setTransform(DPR,0,0,DPR,0,0); ctx.imageSmoothingEnabled=true; }
+resizeCanvas(); addEventListener('resize', resizeCanvas);
+
+/* ===== UI refs ===== */
+const startScreen=document.getElementById('startScreen'), gameOverEl=document.getElementById('gameOver');
+const startBtn=document.getElementById('startBtn'), restartBtn=document.getElementById('restartBtn');
+const finalScore=document.getElementById('finalScore'), finalBest=document.getElementById('finalBest');
+const qualifyBox=document.getElementById('qualifyBox'), initialsEl=document.getElementById('initials');
+const saveScoreBtn=document.getElementById('saveScoreBtn'), skipBtn=document.getElementById('skipBtn');
+const lbEl=document.getElementById('lb'), lbSub=document.getElementById('lbSub');
+
+/* ===== Sprite ===== */
+const vespaImg=new Image(); vespaImg.src='Blue Vespa Right.png'; let vespaReady=false; vespaImg.onload=()=>vespaReady=true;
+
+/* ===== Physics ===== */
+const W=960,H=540,floorY=H*0.78,gravity=0.9,JUMP_VEL_1=-14.5,JUMP_VEL_2=-12.2,COYOTE_FRAMES=8,BUFFER_FRAMES=10;
+
+/* ===== World ===== */
+const world={t:0,speed:8,baseSpeed:8,maxSpeed:20,score:0,best:Number(localStorage.getItem('vespa_best')||0),alive:false,
+  gapMin:320,gapMax:520,spawnDist:300,rampK:0.020,gapTightenEvery:40,gapMinFloor:220,gapMaxFloor:360};
+function effectiveSpeed(){return Math.min(world.maxSpeed, world.baseSpeed + world.score*world.rampK);}
+
+/* ===== Input & Player ===== */
+const keys={up:false,space:false}, KEY={UP:38,SPACE:32,R:82};
+const PLAYER_W=120,PLAYER_H=80;
+const player={x:W*0.18,y:floorY,vy:0,w:PLAYER_W,h:PLAYER_H,onGround:true,jumps:0,coyote:0,jumpBuffer:0,usedDouble:false};
+
+/* ===== Obstacles ===== */
+const TRI_COLORS=['#ff6b6b','#ffd166','#06d6a0','#118ab2','#8338ec','#ef476f','#f9c74f','#90be6d'];
+const obstacles=[]; function randInt(a,b){return (a+Math.random()*(b-a))|0;}
+function spawnTriangleAt(x){const base=38+Math.random()*48,high=44+Math.random()*90,color=TRI_COLORS[(Math.random()*TRI_COLORS.length)|0];obstacles.push({x,y:floorY,base,height:high,color});}
+function planNextSpawn(){const airtimeFrames=(2*Math.abs(JUMP_VEL_1))/gravity; const safePixels=Math.max(world.gapMinFloor,Math.min(world.gapMax,world.speed*airtimeFrames*0.9)); const min=Math.max(world.gapMinFloor,Math.min(world.gapMin,safePixels)); const max=Math.max(world.gapMaxFloor,world.gapMax); world.spawnDist=randInt(min,max);}
+
+/* ===== Leaderboard ===== */
+async function renderLB(){const lb=(await apiGetTop10())||[]; lbEl.innerHTML=''; lb.forEach((e,i)=>{const li=document.createElement('li'); const name=(e.name||'---').toUpperCase().slice(0,3); li.innerHTML=`<span>${i+1}.) ${name}</span><span>${e.score}</span>`; lbEl.appendChild(li);}); lbSub.textContent=lb.length?'Global leaderboard':'No scores yet — be the first!';}
+renderLB();
+
+/* ===== State helpers ===== */
+function hardResetInput(){keys.up=false;keys.space=false;player.jumpBuffer=0;}
+function resetGame(){world.t=0;world.score=0;world.speed=world.baseSpeed;world.gapMin=320;world.gapMax=520;world.spawnDist=300;player.y=floorY;player.vy=0;player.onGround=true;player.jumps=0;player.usedDouble=false;player.coyote=0;player.jumpBuffer=0;obstacles.length=0;hardResetInput();}
+function startGame(){resetGame();world.alive=true;startScreen.style.display='none';gameOverEl.style.display='none';}
+let awaitingInitials=false;
+
+/* ===== Game over flow ===== */
+function gameOver(){world.alive=false; finalScore.textContent=Math.floor(world.score); if(world.score>world.best){world.best=Math.floor(world.score); localStorage.setItem('vespa_best',world.best);} finalBest.textContent=world.best;
+  (async()=>{const lb=(await apiGetTop10())||[]; const minToBeat=lb.length<10?0:(lb[9]?.score||0); const qualifies=Math.floor(world.score)>minToBeat||lb.length<10; qualifyBox.style.display=qualifies?'block':'none'; awaitingInitials=qualifies; initialsEl.value=''; gameOverEl.style.display='flex'; if(qualifies) setTimeout(()=>initialsEl.focus(),80);})(); hardResetInput();}
+
+/* ===== Input handlers ===== */
+function keyHandler(e,down){ if(e.keyCode===KEY.SPACE||e.keyCode===KEY.UP){ if(down) e.preventDefault(); if(e.keyCode===KEY.SPACE) keys.space=down; else keys.up=down; if(down && !world.alive && !awaitingInitials){startGame();return;} if(down && world.alive){player.jumpBuffer=BUFFER_FRAMES;} } else if(e.keyCode===KEY.R && down){ doRestartFlow(); } }
+addEventListener('keydown', e=>keyHandler(e,true)); addEventListener('keyup', e=>keyHandler(e,false));
+startBtn.addEventListener('click', e=>{e.preventDefault(); startGame();});
+
+/* ===== Save/Skip/Restart ===== */
+function sanitizeInitials(s){return (s||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,3);}
+initialsEl.addEventListener('input', ()=>{const clean=sanitizeInitials(initialsEl.value); if(initialsEl.value!==clean) initialsEl.value=clean;});
+function setSaving(state){saveScoreBtn.textContent=state?'Saving…':'Save'; saveScoreBtn.style.opacity=state?'.7':'1'; saveScoreBtn.style.pointerEvents=state?'none':'auto';}
+async function trySaveIfNeeded(){const name=sanitizeInitials(initialsEl.value); if(!awaitingInitials||name.length<1) return true; try{ setSaving(true); await apiSaveScore(name,Math.floor(world.score)); await renderLB(); return true; }catch(err){ alert('Save failed: '+(err.message||err)); return false; } finally{ setSaving(false);} }
+async function doRestartFlow(){ await trySaveIfNeeded(); awaitingInitials=false; startGame(); }
+saveScoreBtn.addEventListener('click', async e=>{e.preventDefault(); await doRestartFlow();});
+skipBtn.addEventListener('click', async e=>{e.preventDefault(); awaitingInitials=false; startGame();});
+restartBtn.addEventListener('click', async e=>{e.preventDefault(); await doRestartFlow();});
+
+/* ===== Gameplay ===== */
+function handlePlayerControls(){ if(player.onGround) player.coyote=COYOTE_FRAMES; else if(player.coyote>0) player.coyote--; if(player.jumpBuffer>0) player.jumpBuffer--; if(player.jumpBuffer>0 && (player.onGround||player.coyote>0)){ player.vy=JUMP_VEL_1; player.onGround=false; player.jumps=1; player.usedDouble=false; player.jumpBuffer=0; } else if(player.jumpBuffer>0 && !player.onGround && !player.usedDouble){ player.vy=JUMP_VEL_2; player.usedDouble=true; player.jumps=2; player.jumpBuffer=0; } }
+function update(){ world.t++; if(world.alive){ world.speed=effectiveSpeed(); if(Math.floor(world.score)%world.gapTightenEvery===0 && world.score>0 && world.t%10===0){ world.gapMin=Math.max(world.gapMinFloor,world.gapMin-6); world.gapMax=Math.max(world.gapMaxFloor,world.gapMax-8);} handlePlayerControls(); player.vy+=gravity; player.y+=player.vy; if(player.y>=floorY){player.y=floorY; player.vy=0; if(!player.onGround){player.onGround=true; player.usedDouble=false; player.jumps=0;}} else {player.onGround=false;} for(let i=obstacles.length-1;i>=0;i--){const o=obstacles[i]; o.x-=world.speed; if(o.x+o.base<-120) obstacles.splice(i,1);} world.spawnDist-=world.speed; if(world.spawnDist<=0){const startX=W+40; spawnTriangleAt(startX); if(Math.random()<0.35){const subGap=Math.max(world.gapMinFloor*0.55,Math.min(200+world.speed*10,world.gapMin*0.75)); spawnTriangleAt(startX+subGap);} planNextSpawn();} world.score+=0.24+world.speed*0.013; const pb=getPlayerBounds(); for(const o of obstacles){const ob={x:o.x,y:o.y-o.height,w:o.base,h:o.height}; if(rectsOverlap(pb,ob)){gameOver();break;}} } draw(); requestAnimationFrame(update); }
+
+/* ===== Utils & Drawing ===== */
+function getPlayerBounds(){return {x:player.x-player.w*0.45,y:player.y-player.h,w:player.w*0.9,h:player.h*0.95};}
+function rectsOverlap(a,b){return a.x<b.x+b.w && a.x+a.w>b.x && a.y<b.y+b.h && a.y+a.h>b.y;}
+function drawRoad(){ctx.fillStyle='#2a2a2a'; ctx.fillRect(0,floorY,W,H-floorY); ctx.fillStyle='rgba(255,255,255,.25)'; const stripeW=120,stripeH=6,phase=(world.t*world.speed*0.5)%(stripeW*2); for(let x=-phase;x<W;x+=stripeW*2){const xx1=Math.round(x),xx2=Math.round(x+60); ctx.fillRect(xx1,floorY+30,stripeW,stripeH); ctx.fillRect(xx2,floorY+60,stripeW,stripeH);} }
+function drawTriangles(){for(const o of obstacles){ctx.fillStyle=o.color; ctx.beginPath(); const x0=Math.round(o.x),y0=Math.round(o.y); const x1=Math.round(o.x+o.base/2),y1=Math.round(o.y-o.height); const x2=Math.round(o.x+o.base); ctx.moveTo(x0,y0); ctx.lineTo(x1,y1); ctx.lineTo(x2,y0); ctx.closePath(); ctx.fill();}}
+function drawVespa(){ if(vespaReady){ctx.drawImage(vespaImg,Math.round(player.x-player.w/2),Math.round(player.y-player.h),player.w,player.h);} else {ctx.fillStyle='#1e8bff'; ctx.fillRect(Math.round(player.x-player.w/2),Math.round(player.y-player.h),player.w,player.h);} ctx.fillStyle='rgba(0,0,0,.16)'; ctx.beginPath(); ctx.ellipse(player.x,player.y-2,player.w*0.44,8,0,0,Math.PI*2); ctx.fill();}
+function draw(){ctx.clearRect(0,0,W,H); drawRoad(); drawTriangles(); drawVespa();}
+update();
+</script>
+</body>
+</html>
