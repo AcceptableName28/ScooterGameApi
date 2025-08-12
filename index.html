@@ -126,30 +126,30 @@ let last=performance.now();
 
 let obstacles=[];
 
-/* speed in px/second (consistent across FPS) — faster start + quicker ramp */
-const SPEED_BASE_PPS = 220;   // was 150
-const SPEED_MAX_PPS  = 1100;  // was 800
-const ACCEL_PPS2     = 14;    // was 6
-const WARMUP_SEC     = 0.6;   // shorter warmup
+/* speed in px/second — faster start & quicker ramp */
+const SPEED_BASE_PPS = 240;   // start speed (px/sec)
+const SPEED_MAX_PPS  = 1200;  // cap
+const ACCEL_PPS2     = 18;    // faster acceleration
+const WARMUP_SEC     = 0.5;   // short warmup
 let  speedPPS        = SPEED_BASE_PPS;
 
-/* jump physics — snappier & more responsive */
-const GRAVITY_ASC  = 0.46;    // was 0.38
-const GRAVITY_DESC = 0.70;    // was 0.52
-const JUMP_VEL_1   = 12.6;    // was 12.2
-const JUMP_VEL_2   = 13.2;    // was 12.8
+/* jump physics — more responsive (quicker rise & fall) */
+const GRAVITY_ASC  = 0.54;    // faster rise damping
+const GRAVITY_DESC = 0.82;    // faster fall
+const JUMP_VEL_1   = 13.0;    // single jump pop
+const JUMP_VEL_2   = 13.6;    // bigger double jump
 
-/* size bands + types — fully random from the start (no early bias) */
+/* size bands + types */
 const BANDS = ['small','medium','tall'];
 let lastBand=null, sameBandStreak=0, MAX_SAME_BAND=2;
 
 const COLORS = {
   triangleTall:'#ef476f', triangleMid:'#ffd166', triangleSmall:'#06d6a0',
   tree:'#2e7d32', trunk:'#6d4c41',
-  dog:'#8d6e63', chick:'#ffeb3b', chickBeak:'#ff9800'
+  bldg:'#607d8b', window:'#bbdefb', roof:'#455a64'
 };
 
-let distSinceSpawn=0, nextGapPx=520;  // a bit sooner since speed is higher
+let distSinceSpawn=0, nextGapPx=520;  // earlier first spawn (speed is higher)
 
 /* ===== helpers ===== */
 function drawRoad(){
@@ -197,34 +197,43 @@ function aabbOverlap(a,b){
   return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
 }
 
-/* bias to middle heights (keeps rhythm readable) */
+/* bias to middle heights (readable rhythm) */
 function randMid(){ return (Math.random()+Math.random())/2; }
 
-/* UNBIASED band picker (uniform) with anti‑streak */
+/* Band picker — early **tall** bias then even out; with anti‑streak */
 function pickBand(){
+  const early = Math.max(0, 1 - (score/600)); // strong early, fades by ~600 pts
+  // early weights (more talls), later weights (balanced)
+  const wEarly={small:0.30, medium:0.34, tall:0.36};
+  const wLate ={small:0.36, medium:0.36, tall:0.28};
+  const w={
+    small: wEarly.small*early + wLate.small*(1-early),
+    medium:wEarly.medium*early + wLate.medium*(1-early),
+    tall:  wEarly.tall*early  + wLate.tall*(1-early)
+  };
   if(lastBand && sameBandStreak>=MAX_SAME_BAND){
     const others=BANDS.filter(b=>b!==lastBand);
     const pick=others[Math.floor(Math.random()*others.length)];
-    lastBand=pick; sameBandStreak=1;
-    return pick;
+    lastBand=pick; sameBandStreak=1; return pick;
   }
-  const pick = BANDS[Math.floor(Math.random()*BANDS.length)];
+  const r=Math.random()*(w.small+w.medium+w.tall);
+  const pick = r<w.small ? 'small' : (r<(w.small+w.medium)?'medium':'tall');
   if(pick===lastBand) sameBandStreak++; else { lastBand=pick; sameBandStreak=1; }
   return pick;
 }
 
-/* uniform type picker from the start */
-const OBSTACLE_TYPES = ['triangle','tree','dog','chick'];
+/* object picker — triangles, trees, buildings from the start */
+const OBSTACLE_TYPES = ['triangle','tree','building'];
 function pickObstacleType(){
   return OBSTACLE_TYPES[Math.floor(Math.random()*OBSTACLE_TYPES.length)];
 }
 
-/* specs per band — no late ramp, but capped for small screens */
+/* specs per band — capped for small screens */
 function triangleSpecByBand(band){
   let hMin,hMax;
   if(band==='small'){ hMin=26; hMax=40; }
   else if(band==='medium'){ hMin=44; hMax=56; }
-  else { hMin=58; hMax=88; } // tall
+  else { hMin=58; hMax=90; } // tall
   const cap=Math.max(60, H*0.55);
   hMax=Math.min(hMax, cap);
   const h = hMin + randMid()*(hMax-hMin);
@@ -233,22 +242,23 @@ function triangleSpecByBand(band){
 }
 function rectSpecByBand(band){
   let wMin,wMax,hMin,hMax;
-  if(band==='small'){ wMin=26; wMax=40; hMin=26; hMax=38; }
-  else if(band==='medium'){ wMin=42; wMax=56; hMin=34; hMax=52; }
-  else { wMin=56; wMax=78; hMin=46; hMax=68; }
+  if(band==='small'){ wMin=28; wMax=44; hMin=28; hMax=44; }
+  else if(band==='medium'){ wMin=44; wMax=64; hMin=44; hMax=64; }
+  else { wMin=62; wMax=86; hMin=62; hMax=92; }
   const w = wMin + randMid()*(wMax-wMin);
   const h = hMin + randMid()*(hMax-hMin);
   return {w,h};
 }
 
-/* spacing planner — scales with speed & band */
+/* spacing planner — widens with speed & band so fast play stays fair */
 function planNextGapPx(vPPS, band){
   const pxps=Math.max(1, vPPS);
-  const bandFactor = band==='tall' ? 1.15 : band==='medium' ? 1.05 : 1.0;
-  const baseRT = band==='tall' ? 1.00 : band==='medium' ? 0.92 : 0.86; // slightly tighter rhythm
+  const bandFactor = band==='tall' ? 1.22 : band==='medium' ? 1.08 : 1.0;
+  const baseRT = band==='tall' ? 1.02 : band==='medium' ? 0.94 : 0.88; // slightly tighter rhythm
   const rt = Math.max(0.66, baseRT + ((Math.random()*2-1)*0.10));
-  const margin = (130 + (vPPS/11)) * bandFactor + (band==='tall'?66:(band==='medium'?32:14));
-  return Math.max(240, Math.round(pxps*rt + margin));
+  // widen margin more aggressively with speed
+  const margin = (150 + (vPPS/7)) * bandFactor + (band==='tall'?78:(band==='medium'?40:18));
+  return Math.max(260, Math.round(pxps*rt + margin));
 }
 
 /* spawn */
@@ -262,16 +272,14 @@ function spawnObstacle(){
     obstacles.push({ kind, band, x:W+24, y:floorY, base:spec.base, height:spec.height, color });
   } else if(kind==='tree'){
     const sz=rectSpecByBand(band);
-    const trunkW=Math.max(10, sz.w*0.25), trunkH=Math.max(18, sz.h*0.55);
+    const trunkW=Math.max(10, sz.w*0.25), trunkH=Math.max(20, sz.h*0.6);
     const crownR=Math.max(16, Math.max(sz.w,sz.h)*0.7);
     obstacles.push({ kind, band, x:W+24, y:floorY, w:sz.w, h:sz.h, trunkW, trunkH, crownR });
-  } else if(kind==='dog'){
+  } else { // building
     const sz=rectSpecByBand(band);
-    obstacles.push({ kind, band, x:W+24, y:floorY, w:sz.w*1.1, h:sz.h*0.8 });
-  } else { // chick
-    const sz=rectSpecByBand(band);
-    const r=Math.max(14, (sz.w+sz.h)/4);
-    obstacles.push({ kind, band, x:W+24, y:floorY, r, w:r*1.8, h:r*1.6 });
+    const floors = Math.max(2, Math.round(sz.h/16));
+    const cols   = Math.max(2, Math.round(sz.w/18));
+    obstacles.push({ kind, band, x:W+24, y:floorY, w:sz.w, h:sz.h, floors, cols });
   }
 
   nextGapPx = planNextGapPx(speedPPS, band);
@@ -289,50 +297,45 @@ function drawAndCollideObstacle(o, hit){
     if(hitsTriangle(hit, o)) return true;
 
   } else if(o.kind==='tree'){
+    // trunk
     ctx.fillStyle=COLORS.trunk;
     ctx.fillRect(o.x + (o.w-o.trunkW)/2, o.y-o.trunkH, o.trunkW, o.trunkH);
+    // crown
     ctx.fillStyle=COLORS.tree;
     ctx.beginPath();
     ctx.ellipse(o.x+o.w/2, o.y-o.trunkH - o.crownR*0.6, o.crownR*0.85, o.crownR*0.7, 0, 0, Math.PI*2);
     ctx.fill();
+    // padded AABB
     const box={x:o.x+6, y:o.y - (o.trunkH + o.crownR*1.2), w:o.w-12, h:(o.trunkH + o.crownR*1.2)};
     if(aabbOverlap(hit, box)) return true;
 
-  } else if(o.kind==='dog'){
-    const rx=12, ry=8;
-    ctx.fillStyle=COLORS.dog;
-    roundRect(ctx, o.x, o.y-o.h, o.w, o.h, rx, ry); ctx.fill();
-    roundRect(ctx, o.x+o.w*0.72, o.y-o.h*0.9, o.w*0.38, o.h*0.55, 10,10); ctx.fill();
-    const box={x:o.x+6, y:o.y-o.h, w:o.w-12, h:o.h};
-    if(aabbOverlap(hit, box)) return true;
-
-  } else { // chick
-    const r=o.r, cx=o.x+o.w/2, cy=o.y - r;
-    ctx.fillStyle=COLORS.chick;
-    ctx.beginPath(); ctx.ellipse(cx, cy, r, r*0.9, 0, 0, Math.PI*2); ctx.fill();
-    ctx.fillStyle=COLORS.chickBeak;
-    ctx.beginPath();
-    ctx.moveTo(cx+r*0.2, cy);
-    ctx.lineTo(cx+r*0.45, cy+r*0.12);
-    ctx.lineTo(cx+r*0.45, cy-r*0.12);
-    ctx.closePath(); ctx.fill();
-    const box={x:o.x+6, y:o.y - r*1.9, w:o.w-12, h:r*1.9};
+  } else { // building
+    const bx=o.x, by=o.y - o.h, bw=o.w, bh=o.h;
+    // body
+    ctx.fillStyle=COLORS.bldg;
+    ctx.fillRect(bx, by, bw, bh);
+    // roof cap
+    ctx.fillStyle=COLORS.roof;
+    ctx.fillRect(bx-2, by-6, bw+4, 6);
+    // windows grid
+    const pad=6, wW=8, wH=10, gapX=6, gapY=8;
+    let y=by+pad;
+    for(let r=0;r<o.floors;r++){
+      let x=bx+pad;
+      for(let c=0;c<o.cols;c++){
+        ctx.fillStyle= (Math.random()<0.15) ? '#cfd8dc' : COLORS.window;
+        ctx.fillRect(x, y, wW, wH);
+        x += wW+gapX;
+        if(x + wW + pad > bx+bw) break;
+      }
+      y += wH+gapY;
+      if(y + wH + pad > by+bh) break;
+    }
+    // collision AABB (friendly inset)
+    const box={x:bx+6, y:by, w:bw-12, h:bh};
     if(aabbOverlap(hit, box)) return true;
   }
   return false;
-}
-function roundRect(c, x, y, w, h, rx, ry){
-  c.beginPath();
-  c.moveTo(x+rx,y);
-  c.lineTo(x+w-rx,y);
-  c.quadraticCurveTo(x+w,y,x+w,y+ry);
-  c.lineTo(x+w,y+h-ry);
-  c.quadraticCurveTo(x+w,y+h,x+w-rx,y+h);
-  c.lineTo(x+rx,y+h);
-  c.quadraticCurveTo(x,y+h,x,y+h-ry);
-  c.lineTo(x,y+ry);
-  c.quadraticCurveTo(x,y,x+rx,y);
-  c.closePath();
 }
 
 /* ===== control ===== */
