@@ -156,15 +156,45 @@ function onPointerDown(e) {
   handleTap();
 }
 
-window.addEventListener('pointerdown', onPointerDown, { passive: false });
+// ----- TAP / TOUCH: attach ONLY to the canvas -----
+const tapSurface = document.getElementById('game'); // the canvas
 
-// Fallback for older browsers (just in case)
-window.addEventListener('touchstart', function(e){
+function handleTap() {
+  if (!world.alive && !awaitingInitials) { startGame(); return; }
+  if (world.alive) { player.jumpBuffer = BUFFER_FRAMES; }
+}
+
+// Only react to taps on the canvas when the overlays are NOT active
+function onCanvasPointerDown(e) {
+  if (e.pointerType === 'mouse') return;          // ignore mouse clicks
+  if (gameOverEl.style.display === 'flex') return; // overlay is up; let UI work
+  if (startScreen.style.display !== 'none') { e.preventDefault(); handleTap(); return; }
+  if (awaitingInitials) return;                   // typing initials; don't steal events
+  e.preventDefault();                             // stop scroll/zoom on iOS
+  handleTap();
+}
+
+function onCanvasTouchStart(e) {
+  if (gameOverEl.style.display === 'flex' || awaitingInitials) return;
   if (e.touches && e.touches.length === 1) {
     e.preventDefault();
     handleTap();
   }
-}, { passive: false });
+}
+
+tapSurface.addEventListener('pointerdown', onCanvasPointerDown, { passive: false });
+tapSurface.addEventListener('touchstart',  onCanvasTouchStart,  { passive: false });
+
+// Make sure overlay controls never bubble to the canvas listeners
+[initialsEl, saveScoreBtn, skipBtn, restartBtn, startBtn].forEach(el => {
+  if (!el) return;
+  el.addEventListener('pointerdown', e => e.stopPropagation(), { passive: true });
+  el.addEventListener('touchstart',  e => e.stopPropagation(), { passive: true });
+});
+
+// Optional nice-to-have: remove the 300ms delay + highlight on mobile
+document.body.style.touchAction = 'manipulation';
+document.body.style.webkitTapHighlightColor = 'transparent';
 
 /* ===== Save/Skip/Restart ===== */
 function sanitizeInitials(s){return (s||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,3);}
